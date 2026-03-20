@@ -9,6 +9,9 @@ session_traded.json
 cross_bot_active.json
 balance_history.json
 placed_this_run.json
+milestones_today.json
+running_balance.json
+close_on_profit.json
 
 # ── Logs ─────────────────────────────────────────────────────────
 *.log
