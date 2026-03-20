@@ -1,29 +1,28 @@
-# ── Secrets — NEVER upload ───────────────────────────────────────
-.env
-*.env
-.env.*
+# ── Ignore everything by default ─────────────────────────────────
+*
 
-# ── Bot state files (auto-recreate on startup) ───────────────────
-placed_today.json
-session_traded.json
-cross_bot_active.json
-balance_history.json
-placed_this_run.json
-milestones_today.json
-running_balance.json
-close_on_profit.json
+# ── Only allow bot folders and shared files ───────────────────────
+!trading_automation/
+!trading_automation/**
+!VISHU_ELITE_BOT/
+!VISHU_ELITE_BOT/**
+!VISHU_SMC_BOT/
+!VISHU_SMC_BOT/**
+!cross_bot_lock.py
+!START_3_BOTS.bat
+!.gitignore
 
-# ── Logs ─────────────────────────────────────────────────────────
-*.log
-logs/
-
-# ── Python cache ─────────────────────────────────────────────────
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# ── OS files ─────────────────────────────────────────────────────
-.DS_Store
-Thumbs.db
-desktop.ini
+# ── Block secrets and state files inside bot folders ─────────────
+**/.env
+**/*.env
+**/placed_today.json
+**/session_traded.json
+**/cross_bot_active.json
+**/balance_history.json
+**/placed_this_run.json
+**/milestones_today.json
+**/running_balance.json
+**/close_on_profit.json
+**/__pycache__/
+**/*.pyc
+**/*.log
