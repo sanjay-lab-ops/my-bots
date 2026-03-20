@@ -1,0 +1,12 @@
+{
+  "start_balance": 50.0,
+  "start_date": "2026-03-19",
+  "history": [
+    {
+      "date": "2026-03-19",
+      "end_balance": 182.73
+    }
+  ],
+  "current_balance": 182.73,
+  "last_updated": "2026-03-19T13:19:25.553597+00:00"
+}

@@ -1,0 +1,26 @@
+# ── Secrets — NEVER upload ───────────────────────────────────────
+.env
+*.env
+.env.*
+
+# ── Bot state files (auto-recreate on startup) ───────────────────
+placed_today.json
+session_traded.json
+cross_bot_active.json
+balance_history.json
+placed_this_run.json
+
+# ── Logs ─────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Python cache ─────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ── OS files ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini

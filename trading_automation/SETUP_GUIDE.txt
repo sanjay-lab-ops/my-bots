@@ -1,0 +1,276 @@
+╔══════════════════════════════════════════════════════════════════════╗
+║           VISHU TRADING BOT — COMPLETE SETUP GUIDE                  ║
+║           Save this file. Everything you need is here.              ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 1 — WHAT THIS BOT DOES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Trades BTCUSD and XAUUSD (Gold) on your Exness MT5 demo account.
+
+Strategy:
+  - 4H VWAP/PVWAP tells direction (BUY or SELL only)
+  - UTBot + Elder Impulse confirm on 4H / 1H / 15M
+  - EMA5 crosses EMA20 on 1-minute chart = entry trigger
+  - Trailing stop: SL moves to breakeven at 50% of TP
+                   then trails behind price at 75% of TP
+  - Trade carries from morning session until end of evening session
+    (9.5 hours instead of just 90 minutes)
+
+Sessions (IST times):
+  BTC Morning  →  9:30 AM – 11:00 AM
+  Gold Morning →  11:30 AM – 1:00 PM
+  BTC Evening  →  5:30 PM – 7:00 PM
+  Gold Evening →  7:30 PM – 9:00 PM
+
+Days:
+  Monday     → SKIP (bot does not trade)
+  Tue/Wed/Thu → FULL LOT (best days)
+  Friday     → HALF LOT (weekend risk)
+  Saturday   → BTC only, half lot (Gold market closed)
+  Sunday     → BTC only, half lot (Gold market closed)
+
+Risk:
+  $50  account → BTC only (Gold needs $335+ to be safe)
+  $200 account → BTC + Gold (Gold risk is high, 33% per trade)
+  $500 account → BTC + Gold (Gold risk is safe, 13% per trade)
+  Risk mode    → MODERATE (2% per trade)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 2 — YOUR CREDENTIALS (keep this private)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MT5 Demo Account:
+  Login    : 463159565
+  Password : SanjayIPS@8055
+  Server   : Exness-MT5Trial17
+
+Telegram:
+  Token    : (in your .env file — TELEGRAM_TOKEN)
+  Chat ID  : (in your .env file — TELEGRAM_CHAT_ID)
+
+News API:
+  Key      : (in your .env file — NEWS_API_KEY, optional)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 3 — BAT FILES (what each one does)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  0_WEEKLY_SCHEDULE.bat        → Shows which days bot will trade this week
+  1_INSTALL.bat                → Install Python packages (run once)
+  2_TEST.bat                   → Test MT5 connection + Telegram
+  3_BACKTEST_TODAY.bat         → Backtest today or yesterday
+  4_BACKTEST_RANGE.bat         → Backtest Mar 19–31 (all 3 balances)
+  5_START_BOT.bat              → Start AUTO bot (trades automatically)
+  6_AUTOSTART_SETUP.bat        → Schedule bot to start automatically (run as admin)
+  7_MANUAL_ASSISTANT.bat       → Start MANUAL assistant (Telegram alerts only)
+  8_BACKTEST_MANUAL_TELEGRAM.bat → Replay Mar 16-18 signals to Telegram
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 4 — DAILY ROUTINE (March 19–31 testing)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Every morning:
+  1. Open MT5 → login to demo account
+  2. Double-click 5_START_BOT.bat → auto bot runs
+  3. Double-click 7_MANUAL_ASSISTANT.bat → Telegram alerts come to phone
+  4. Bot stops automatically after 9 PM IST
+
+OR if you set up autostart (recommended):
+  1. Open MT5 (bot opens it automatically if you ran 6_AUTOSTART_SETUP.bat)
+  2. Everything else is automatic — check Telegram for alerts
+
+To check weekly schedule:
+  Run 0_WEEKLY_SCHEDULE.bat
+
+To backtest any date range:
+  Open backtest_range.py → change START_DATE and END_DATE → run 4_BACKTEST_RANGE.bat
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 5 — TELEGRAM MESSAGES YOU WILL RECEIVE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+From AUTO bot (5_START_BOT.bat):
+  - Bot started (balance shown)
+  - Trade opened (pair, buy/sell, entry, SL, TP, lot)
+  - Daily report at 6:30 PM UTC
+
+From MANUAL assistant (7_MANUAL_ASSISTANT.bat):
+  - Session opening (which pair, which direction)
+  - Manual entry signal (entry, SL, TP, lot — you enter manually)
+  - "Verify on chart → Enter manually"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 6 — SETTINGS YOU CAN CHANGE (config.py)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Open config.py to change:
+
+  RISK_MODE = "moderate"
+    → "conservative"  = 1% risk per trade (live accounts)
+    → "moderate"      = 2% risk per trade (demo testing)
+    → "aggressive"    = 5% risk per trade (fast demo growth)
+
+  RR_RATIO = 2.0
+    → 2.0 = TP is 2× the SL distance (2:1 reward:risk)
+    → 1.0 = TP equals the SL distance (1:1, hits faster)
+
+  CARRY_TO_LAST_SESSION = True
+    → True  = trade holds from morning through evening (9.5 hours)
+    → False = trade closes at end of each 90-minute session
+
+  TRAILING_STOP_ENABLED = True
+    → True  = SL moves to breakeven at 50% of TP, then trails
+    → False = fixed SL (original, no movement)
+
+  MANUAL_BALANCE in manual_assistant.py
+    → Set this to your manual account size ($50, $200, $500)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 7 — SETUP ON A NEW LAPTOP (after March 31)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STEP 1 — Install Python
+  Go to: https://python.org/downloads
+  Download Python 3.11 or later
+  During install: CHECK the box "Add Python to PATH"
+
+STEP 2 — Install MT5
+  Go to: https://www.exness.com
+  Download MetaTrader 5
+  Login with: 463159565 / SanjayIPS@8055 / Exness-MT5Trial17
+  (or your new live account credentials)
+
+STEP 3 — Copy the bot folder
+  Copy the entire trading_automation folder to your new laptop
+  Example: C:\trading_automation\
+
+STEP 4 — Install packages
+  Double-click 1_INSTALL.bat
+  Wait for it to finish
+
+STEP 5 — Set up .env file
+  Open the .env file in the folder
+  It should contain:
+    MT5_LOGIN=463159565
+    MT5_PASSWORD=SanjayIPS@8055
+    MT5_SERVER=Exness-MT5Trial17
+    TELEGRAM_TOKEN=your_token_here
+    TELEGRAM_CHAT_ID=your_chat_id_here
+
+STEP 6 — Test everything
+  Double-click 2_TEST.bat
+  You should see: MT5 connected + Telegram message on phone
+
+STEP 7 — For Telegram-only (manual assistant only):
+  Double-click 7_MANUAL_ASSISTANT.bat
+  That's it — alerts come to your phone, you trade manually
+
+STEP 8 — Auto-start setup (optional, run once as admin):
+  Right-click 6_AUTOSTART_SETUP.bat → Run as administrator
+  Bot will start automatically before each session
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 8 — TELEGRAM BOT SETUP (if starting fresh on new laptop)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+If you need to create a new Telegram bot:
+
+  1. Open Telegram → search @BotFather → send /newbot
+  2. Give it a name (e.g. "Vishu Trading Bot")
+  3. Give it a username (e.g. "vishu_trading_bot")
+  4. Copy the TOKEN it gives you
+  5. Search @userinfobot in Telegram → send any message → copy your ID
+  6. Open .env file → paste:
+       TELEGRAM_TOKEN=paste_token_here
+       TELEGRAM_CHAT_ID=paste_id_here
+  7. Open Telegram → find your bot → press START
+  8. Run 2_TEST.bat to confirm it works
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 9 — PROFIT TARGETS AND EXPECTATIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Per trade (at $50 with 0.01 lot):
+  BTC win  → +$34.62   BTC loss  → -$17.31
+  Gold win → +$67.50   Gold loss → -$67.50 (Gold blocked until $335)
+
+Realistic weekly return: 15–30%
+Realistic monthly return: 3×–5× starting balance
+
+Balance milestones:
+  $50  → BTC only
+  $335 → Gold unlocks (both pairs active)
+  $500 → Safe for both pairs (Gold risk drops to 13%)
+  $1730 → Lot size increases from 0.01 to 0.02 for BTC
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 10 — IF SOMETHING BREAKS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MT5 not connecting:
+  → Open MT5 manually first, make sure you are logged in
+  → Check your internet connection
+  → Re-run 2_TEST.bat
+
+No Telegram messages:
+  → Open Telegram → find your bot → press START
+  → Check TELEGRAM_TOKEN and TELEGRAM_CHAT_ID in .env
+  → Re-run 2_TEST.bat
+
+No signals firing:
+  → Check 0_WEEKLY_SCHEDULE.bat (is today a trading day?)
+  → Check if you are inside session times (IST)
+  → Monday = no signals (by design)
+
+Bot log file:
+  → bot.log (auto bot)
+  → manual_bot.log (manual assistant)
+  → Open these in Notepad to see what happened
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECTION 11 — FILE LIST (all files in this folder)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Core bot:
+  main.py              Auto-trading bot (runs every 60 seconds)
+  strategy.py          Signal logic
+  indicators.py        UTBot, EMA, VWAP, Elder Impulse, MACD
+  risk_engine.py       Lot size calculation with safety cap
+  executor.py          Opens/closes trades on MT5
+  mt5_connector.py     MT5 connection handler
+  config.py            All settings — edit this to tune the bot
+  day_filter.py        Mon=skip, Fri=half, weekend=BTC only
+  news_filter.py       Blocks trades near major news events
+  news_trader.py       Trades WITH news direction
+  telegram_notify.py   Sends messages to your phone
+  report.py            Daily P&L report
+  manual_assistant.py  Telegram-only alerts for manual trading
+  weekly_schedule.py   Shows this week's trading days
+
+Backtest:
+  backtest_range.py    Date range backtest (Mar 19–31, all 3 balances)
+  backtest_manual.py   Replays signals and sends to Telegram
+  backtest_today.py    Single day backtest
+
+Bat files:
+  0_WEEKLY_SCHEDULE.bat
+  1_INSTALL.bat
+  2_TEST.bat
+  3_BACKTEST_TODAY.bat
+  4_BACKTEST_RANGE.bat
+  5_START_BOT.bat
+  6_AUTOSTART_SETUP.bat
+  7_MANUAL_ASSISTANT.bat
+  8_BACKTEST_MANUAL_TELEGRAM.bat
+  autostart_runner.bat
+  manual_runner.bat
+
+Config:
+  .env                 Your credentials (MT5 + Telegram)
+  SETUP_GUIDE.txt      This file
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Built for Sanjay | Vishu Trading Bot | March 2026
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
