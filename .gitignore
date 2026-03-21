@@ -10,6 +10,7 @@
 !VISHU_SMC_BOT/**
 !cross_bot_lock.py
 !START_3_BOTS.bat
+!README.md
 !.gitignore
 
 # ── Block secrets and state files inside bot folders ─────────────
