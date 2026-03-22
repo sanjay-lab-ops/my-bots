@@ -12,6 +12,8 @@
 !START_3_BOTS.bat
 !README.md
 !.gitignore
+!requirements.txt
+!.env.example
 
 # ── Block secrets and state files inside bot folders ─────────────
 **/.env

@@ -3,6 +3,19 @@ Central configuration — edit these values to tune the bot.
 All times stored in UTC (IST = UTC + 5h30m).
 """
 
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
+# ── MT5 Credentials (loaded from .env) ──────────────────────────
+MT5_LOGIN    = int(os.getenv("MT5_LOGIN", "0"))
+MT5_PASSWORD = os.getenv("MT5_PASSWORD", "")
+MT5_SERVER   = os.getenv("MT5_SERVER", "")
+
+# ── Telegram (loaded from .env) ──────────────────────────────────
+TELEGRAM_TOKEN   = os.getenv("TELEGRAM_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+
 # ── Instruments ─────────────────────────────────────────────────
 SYMBOLS = {
     "BTCUSD": {
