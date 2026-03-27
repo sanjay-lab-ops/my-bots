@@ -66,10 +66,7 @@ MAX_TRADES_DAY    = 9999    # no limit — trades as many signals as appear
 MAX_OPEN          = 1       # only 1 open trade at a time (safety on $50)
 RR_RATIO          = 1.5     # 1.5:1 RR — quick scalp TP
 
-# ── Loss Lock ──────────────────────────────────────────────────────
-# After ANY losing trade, bot pauses this many minutes before next entry.
-# Prevents chasing losses and revenge trading.
-LOCK_AFTER_LOSS_MINUTES = 30
+# No loss lock — bot keeps trading every valid signal continuously
 
 # ── Indicators ─────────────────────────────────────────────────────
 ATR_PERIOD    = 10

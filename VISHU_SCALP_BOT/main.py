@@ -3,7 +3,6 @@ VISHU SCALP BOT — Live $50 Account
 ====================================
 Entry  : 1H bias + 15M bias BOTH agree → 1M EMA5×EMA20 cross
 Filter : RSI not extreme | Kill zone only
-Lock   : After any loss → pause LOCK_AFTER_LOSS_MINUTES before next trade
 Exit   : 1.5 RR | Breakeven at 50% | Trail at 75%
 """
 
@@ -200,20 +199,6 @@ def has_position(mt5_sym: str) -> bool:
     return any(p.magic == MAGIC_NUMBER for p in positions)
 
 
-# ── Closed Trade Monitor (for loss detection) ──────────────────────
-def get_last_closed_trade() -> dict | None:
-    """Returns the most recently closed trade by this bot, or None."""
-    now  = datetime.now(timezone.utc)
-    from_dt = now - timedelta(hours=24)
-    deals = mt5.history_deals_get(from_dt, now)
-    if not deals:
-        return None
-    bot_deals = [d for d in deals if d.magic == MAGIC_NUMBER and d.entry == mt5.DEAL_ENTRY_OUT]
-    if not bot_deals:
-        return None
-    last = sorted(bot_deals, key=lambda d: d.time)[-1]
-    return {"profit": last.profit, "time": datetime.fromtimestamp(last.time, tz=timezone.utc)}
-
 
 # ── Order Placement ────────────────────────────────────────────────
 def place_order(mt5_sym: str, direction: str, lot: float,
@@ -337,18 +322,15 @@ def run():
     if not connect_mt5():
         return
 
-    balance_start  = get_balance()
-    today_date     = datetime.now(timezone.utc).date()
-    trades_today   = 0
-    locked_until   = None        # datetime — bot locked after a loss
-    last_loss_seen = None        # track which loss triggered the lock
+    balance_start = get_balance()
+    today_date    = datetime.now(timezone.utc).date()
+    trades_today  = 0
 
     tg(
         f"🚀 SCALP BOT STARTED — ALL 4 PAIRS\n"
         f"Balance: ${balance_start:.2f}\n"
         f"Risk: {RISK_PERCENT}%/trade | Daily stop: {DAILY_LOSS_LIMIT}%\n"
-        f"RR: 1:{RR_RATIO} | Loss lock: {LOCK_AFTER_LOSS_MINUTES}min\n"
-        f"Confirmation: 1H + 15M bias must agree"
+        f"RR: 1:{RR_RATIO} | Confirmation: 1H + 15M agree"
     )
 
     while True:
@@ -360,7 +342,6 @@ def run():
                 balance_start = get_balance()
                 today_date    = now.date()
                 trades_today  = 0
-                locked_until  = None
                 log.info("── New day | Balance=$%.2f ──", balance_start)
                 tg(f"🌅 New day | Balance: ${balance_start:.2f}")
 
@@ -379,30 +360,6 @@ def run():
             if is_friday_cutoff():
                 log.info("Friday close — no new scalps (weekend gap risk)")
                 time.sleep(300)
-                continue
-
-            # ── Loss lock check ────────────────────────────────────
-            # Check if last closed trade was a loss — if yes, lock
-            last_trade = get_last_closed_trade()
-            if last_trade and last_trade["profit"] < 0:
-                trade_time = last_trade["time"]
-                if last_loss_seen != trade_time:
-                    # New loss detected — start lock
-                    last_loss_seen = trade_time
-                    locked_until   = trade_time + timedelta(minutes=LOCK_AFTER_LOSS_MINUTES)
-                    loss_amt       = last_trade["profit"]
-                    log.warning("🔐 LOSS DETECTED $%.2f — locked for %d min until %s IST",
-                                loss_amt, LOCK_AFTER_LOSS_MINUTES,
-                                (locked_until + IST).strftime("%H:%M"))
-                    tg(f"🔐 LOSS LOCK\n"
-                       f"Last trade: ${loss_amt:.2f}\n"
-                       f"Pausing {LOCK_AFTER_LOSS_MINUTES}min — no new entries until "
-                       f"{(locked_until + IST).strftime('%H:%M IST')}")
-
-            if locked_until and now < locked_until:
-                mins_left = int((locked_until - now).total_seconds() / 60)
-                log.info("🔐 Loss lock active — %d min remaining", mins_left)
-                time.sleep(60)
                 continue
 
             # ── Kill zone gate ─────────────────────────────────────
