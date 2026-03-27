@@ -355,12 +355,6 @@ def run():
                     time.sleep(3600)
                     continue
 
-            # ── Friday cutoff ──────────────────────────────────────
-            if is_friday_cutoff():
-                log.info("Friday close — no new scalps (weekend gap risk)")
-                time.sleep(300)
-                continue
-
             # ── Kill zone gate ─────────────────────────────────────
             in_kz, kz_name = in_kill_zone()
             if not in_kz:
