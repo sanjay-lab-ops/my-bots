@@ -355,12 +355,9 @@ def run():
                     time.sleep(3600)
                     continue
 
-            # ── Kill zone gate ─────────────────────────────────────
+            # ── Kill zone label (for logging only — no blocking) ───────
             in_kz, kz_name = in_kill_zone()
-            if not in_kz:
-                log.info("[%s] ⏳ No kill zone — next: %s", ist_now(), next_kz_str())
-                time.sleep(60)
-                continue
+            kz_label = kz_name if in_kz else "24/7"
 
             # ── Manage existing trades ─────────────────────────────
             manage_open_trades()
@@ -371,8 +368,8 @@ def run():
                 continue
 
             # ── Scan all 4 symbols — full analysis every tick ──────────
-            log.info("── SCAN [%s] | KZ: %s | Balance: $%.2f ──",
-                     ist_now(), kz_name, balance)
+            log.info("── SCAN [%s] | %s | Balance: $%.2f ──",
+                     ist_now(), kz_label, balance)
             for symbol, cfg in SYMBOLS.items():
                 mt5_sym = cfg["mt5_symbol"]
 
@@ -475,7 +472,7 @@ def run():
                         f"SL: {sl:.5f} | TP: {tp:.5f}\n"
                         f"Risk: ${risk_usd:.2f} → Target: ${reward_usd:.2f}\n"
                         f"1H: {bias_1h} | 15M: {bias_15m} | RSI: {rsi_val:.1f}\n"
-                        f"KZ: {kz_name} | Balance: ${balance:.2f}"
+                        f"Session: {kz_label} | Balance: ${balance:.2f}"
                     )
                     time.sleep(10)
                     break
