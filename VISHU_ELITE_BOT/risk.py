@@ -30,24 +30,31 @@ def get_lot_size(symbol: str, balance: float) -> float:
     lot_step = cfg.get("lot_step", 0.01)
 
     if symbol == "BTCUSD":
-        if balance <= 100:
-            raw = 0.01
-        elif balance <= 300:
-            raw = 0.02
-        elif balance <= 600:
-            raw = 0.05
-        else:
-            raw = 0.10
+        if balance <= 100:    raw = 0.01
+        elif balance <= 300:  raw = 0.02
+        elif balance <= 600:  raw = 0.05
+        elif balance <= 1000: raw = 0.10
+        elif balance <= 2000: raw = 0.20
+        elif balance <= 5000: raw = 0.50
+        else:                 raw = 1.0
+
+    elif symbol == "ETHUSD":
+        if balance <= 100:    raw = 0.1
+        elif balance <= 300:  raw = 0.2
+        elif balance <= 600:  raw = 0.3
+        elif balance <= 1000: raw = 0.5
+        elif balance <= 2000: raw = 1.0
+        else:                 raw = 2.0
 
     elif symbol == "XAUUSD":
-        if balance <= 200:
-            raw = 0.01
-        elif balance <= 500:
-            raw = 0.02
-        elif balance <= 1000:
-            raw = 0.05
-        else:
-            raw = 0.10
+        if balance <= 500:    raw = 0.01
+        elif balance <= 800:  raw = 0.02
+        elif balance <= 1200: raw = 0.03
+        else:                 raw = 0.05   # max 0.05 — safe for all balance levels
+
+    elif symbol == "XAGUSD":  # contract_size=5000, very sensitive, keep lots tiny
+        if balance <= 2000:   raw = 0.01
+        else:                 raw = 0.02   # max 0.02 — 0.05 risks $800+ at small SL
 
     else:
         raw = min_lot
@@ -137,12 +144,16 @@ def check_trade_risk(
     min_lot_risk_usd = min_lot * atr_val * ATR_SL_MULT * contract_size
     min_lot_risk_pct = (min_lot_risk_usd / balance) * 100
 
-    if min_lot_risk_pct > 20:
+    # Hard block: if minimum possible lot already risks > 50% of balance, do not trade.
+    # Gold 0.01 lot = $94-160 risk. At $50 balance that is 188%+ — guaranteed account wipe.
+    if min_lot_risk_pct > 50:
         logger.warning(
-            "HIGH RISK WARNING [%s]: min lot risks %.1f%% of $%.2f",
+            "TRADE BLOCKED [%s]: min lot risks %.1f%% of $%.2f — "
+            "need balance $%.0f to safely trade this pair",
             symbol, min_lot_risk_pct, balance,
+            (min_lot_risk_usd / 0.20),
         )
-        # Silver blocked via MIN_BALANCE_TO_TRADE in config
+        return False   # signals caller to skip this trade
 
     if risk_pct > 20:
         logger.warning(

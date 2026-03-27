@@ -111,15 +111,49 @@ def calculate_lot(balance: float, sl_distance: float, symbol: str) -> float:
     sl_dollar   = sl_distance * contract_size
     raw_lot     = risk_amount / sl_dollar
 
+    # For gold/silver the formula gives tiny lots (sl_dollar is huge due to contract_size=100).
+    # Use balance tiers as a floor so lot sizes are meaningful at higher balances.
+    if "XAU" in symbol:
+        if balance <= 500:    tier_floor = 0.01
+        elif balance <= 800:  tier_floor = 0.02
+        elif balance <= 1200: tier_floor = 0.03
+        else:                 tier_floor = 0.05   # max 0.05 — safe for all balance levels
+        raw_lot = max(raw_lot, tier_floor)
+    elif "XAG" in symbol:  # Silver — contract_size=5000, very sensitive, keep lots tiny
+        if balance <= 2000:   tier_floor = 0.01
+        else:                 tier_floor = 0.02   # max 0.02 — 0.05 risks $800+ at small SL
+        raw_lot = max(raw_lot, tier_floor)
+    elif "BTC" in symbol:
+        if balance <= 100:    tier_floor = 0.01
+        elif balance <= 300:  tier_floor = 0.02
+        elif balance <= 600:  tier_floor = 0.05
+        elif balance <= 1000: tier_floor = 0.10
+        elif balance <= 2000: tier_floor = 0.20
+        else:                 tier_floor = 0.50
+        raw_lot = max(raw_lot, tier_floor)
+    elif "ETH" in symbol:
+        if balance <= 100:    tier_floor = 0.1
+        elif balance <= 300:  tier_floor = 0.2
+        elif balance <= 600:  tier_floor = 0.3
+        elif balance <= 1000: tier_floor = 0.5
+        elif balance <= 2000: tier_floor = 1.0
+        else:                 tier_floor = 2.0
+        raw_lot = max(raw_lot, tier_floor)
+
     # Clamp to valid range
     raw_lot = max(min_lot, min(max_lot, raw_lot))
     lot     = round(math.floor(raw_lot / lot_step) * lot_step, 2)
 
-    # Warn if min lot risk is high (Silver blocked via MIN_BALANCE_TO_TRADE in config)
+    # Hard risk cap — block trade if minimum lot risks > 50% of balance
+    # Gold 0.01 lot = $94-160 risk. At $50 balance that is 188%+ — account wipe guaranteed.
+    # Returns 0 → main.py sees lot=0 and skips the trade entirely.
     min_risk_pct = (min_lot * sl_dollar / balance) * 100
-    if min_risk_pct > 10:
-        logger.warning("HIGH RISK WARNING [%s]: min lot risks %.1f%% of $%.2f",
-                       symbol, min_risk_pct, balance)
+    if min_risk_pct > 50:
+        logger.warning(
+            "TRADE BLOCKED [%s]: min lot risks %.1f%% of $%.2f — skipping to protect account",
+            symbol, min_risk_pct, balance,
+        )
+        return 0   # signals main.py to skip this trade
 
     logger.info("Lot [%s]: $%.2f balance × %.1f%% risk / $%.2f SL = %.2f lots",
                 symbol, balance, RISK_PERCENT, sl_dollar, lot)

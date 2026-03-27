@@ -21,6 +21,11 @@ BLOCK_MINUTES = 15   # minutes to block before and after an event
 _news_cache        = {"blocked": False, "reason": "", "fetched_at": None}
 NEWS_CACHE_MINUTES = 30
 
+# ── Failure backoff — skip retrying when API is unreachable ──────
+_api_fail_count    = 0
+_api_retry_after   = None   # datetime after which we try again
+API_BACKOFF_MINUTES = 60    # after 3 failures, pause for 60 min
+
 # ── High-impact keywords ─────────────────────────────────────────
 BLOCK_KEYWORDS = [
     # Fed / central banks
@@ -102,12 +107,20 @@ def _check_calendar() -> tuple:
 
 def _check_newsapi() -> tuple:
     """Search recent headlines for block keywords via NewsAPI.
-    Result is cached for 30 minutes to stay within free tier (100 req/day)."""
+    Result is cached for 30 minutes to stay within free tier (100 req/day).
+    After 3 consecutive failures, backs off for 60 minutes to avoid log spam."""
+    global _api_fail_count, _api_retry_after
+
     if not NEWS_API_KEY or NEWS_API_KEY == "your_newsapi_key_here":
         return False, ""
 
-    # Return cached result if fresh
     now = datetime.now(timezone.utc)
+
+    # Backoff: if API repeatedly failing, stop retrying until backoff expires
+    if _api_retry_after and now < _api_retry_after:
+        return _news_cache["blocked"], _news_cache["reason"]
+
+    # Return cached result if fresh
     if _news_cache["fetched_at"] is not None:
         age = (now - _news_cache["fetched_at"]).total_seconds() / 60
         if age < NEWS_CACHE_MINUTES:
@@ -120,9 +133,14 @@ def _check_newsapi() -> tuple:
             f"&sortBy=publishedAt&pageSize=20"
             f"&apiKey={NEWS_API_KEY}"
         )
-        resp = requests.get(url, timeout=8)
+        resp = requests.get(url, timeout=5)
         if resp.status_code != 200:
+            _api_fail_count += 1
             return False, ""
+
+        # Success — reset failure count
+        _api_fail_count  = 0
+        _api_retry_after = None
 
         articles = resp.json().get("articles", [])
         for article in articles:
@@ -143,8 +161,15 @@ def _check_newsapi() -> tuple:
                         except Exception:
                             pass
     except Exception as e:
-        logger.warning("NewsAPI check failed: %s", e)
-        return _news_cache["blocked"], _news_cache["reason"]  # return last known
+        _api_fail_count += 1
+        if _api_fail_count == 1:
+            logger.warning("NewsAPI unavailable: %s", e)
+        elif _api_fail_count >= 3:
+            _api_retry_after = now + timedelta(minutes=API_BACKOFF_MINUTES)
+            logger.info("NewsAPI down — pausing checks for %d min (calendar protection still active)",
+                        API_BACKOFF_MINUTES)
+            _api_fail_count = 0
+        return _news_cache["blocked"], _news_cache["reason"]
 
     # Update cache
     _news_cache["blocked"]    = False

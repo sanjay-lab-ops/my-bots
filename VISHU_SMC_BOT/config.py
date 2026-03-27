@@ -109,7 +109,7 @@ MAGIC_NUMBER = 20260320   # Bot 3 SMC — unique, different from Bot 2 (20260319
 MIN_BALANCE_TO_TRADE = {
     "ETHUSD": 50,    # safe from $50
     "BTCUSD": 50,    # safe from $50
-    "XAUUSD": 50,    # safe from $50
+    "XAUUSD": 50,    # Hard risk cap enforced in compounding.py — blocks trade if min lot > 50% balance
     "XAGUSD": 200,   # Silver blocked until $200 balance
 }
 

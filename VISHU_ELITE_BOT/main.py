@@ -20,7 +20,7 @@ import os
 import sys
 import time
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from dotenv import load_dotenv
 
 # Cross-bot race prevention
@@ -56,7 +56,8 @@ from news_filter    import is_news_blocked, get_next_news_event
 from executor       import open_trade, close_all_for_symbol, close_all_positions_eod
 from trade_manager  import run_trade_manager
 from session        import (is_session_active, get_active_session_label, any_session_active,
-                             all_sessions_done_for_day, get_session_key, get_ist_time_label)
+                             all_sessions_done_for_day, get_session_key, get_ist_time_label,
+                             session_just_opened)
 import telegram_notify as tg
 from elite_execution import elite_filter
 from telegram_commands import is_paused
@@ -353,11 +354,20 @@ def bot_tick():
     news_blocked, news_reason = is_news_blocked()
 
     # ── 4. Per-symbol evaluation ──────────────────────────────────
+    # ETH/BTC and XAG/XAU correlation trackers
+    _btc_elite_bias = None
+    _xau_elite_bias = None
+
     for symbol in SYMBOLS:
         mt5_sym = SYMBOLS[symbol]["mt5_symbol"]
 
         # Skip if not in session for this specific symbol
         if not is_session_active(symbol):
+            continue
+
+        # Session open delay — wait 15 min after open (London open manipulation trap)
+        if session_just_opened(symbol, wait_minutes=15):
+            logger.info("[%s] Session just opened — waiting 15 min for direction (avoid open trap)", symbol)
             continue
 
         # Balance protection — skip if account too small for this symbol
@@ -425,6 +435,27 @@ def bot_tick():
 
         logger.info("[%s] Bias: %s", symbol, bias)
 
+        # ── ETH/BTC and XAG/XAU correlation filters ──────────────
+        if symbol == "BTCUSD" and bias != "NEUTRAL":
+            _btc_elite_bias = bias
+        elif symbol == "ETHUSD" and _btc_elite_bias and bias != "NEUTRAL":
+            if bias != _btc_elite_bias:
+                logger.info(
+                    "[ETHUSD] CORRELATION SKIP: BTC=%s but ETH=%s — skipping",
+                    _btc_elite_bias, bias,
+                )
+                continue
+        _xag_elite_divergence = False
+        if symbol == "XAUUSD" and bias != "NEUTRAL":
+            _xau_elite_bias = bias
+        elif symbol == "XAGUSD" and _xau_elite_bias and bias != "NEUTRAL":
+            if bias != _xau_elite_bias:
+                _xag_elite_divergence = True
+                logger.info(
+                    "[XAGUSD] DIVERGENCE: XAU=%s but XAG=%s — trading min lot 0.01",
+                    _xau_elite_bias, bias,
+                )
+
         # ── 4g. Entry signal — 1M EMA cross + RSI + ATR filter ───
         signal, atr_val, entry_reason = check_entry(
             symbol, bias, candles["1M"], candles["4H"]
@@ -438,6 +469,10 @@ def bot_tick():
         # ── 4h. Risk calculation ──────────────────────────────────
         balance = get_balance()
         lot     = get_lot_size(symbol, balance)
+        # XAG divergence from XAU — cap at minimum lot to limit risk
+        if symbol == "XAGUSD" and _xag_elite_divergence:
+            lot = SYMBOLS[symbol].get("min_lot", 0.01)
+            logger.info("[XAGUSD] DIVERGENCE LOT CAP: using min lot %.2f", lot)
 
         if not check_trade_risk(symbol, balance, lot, atr_val):
             logger.warning("[%s] Skip — risk check failed (account too small for ATR risk)", symbol)
@@ -624,8 +659,15 @@ def run():
                 if all_sessions_done_for_day() and daily_summary_sent:
                     logger.info("All sessions complete — closing all positions and pending orders.")
                     close_all_positions_eod()
-                    logger.info("EOD done — bot shutting down.")
-                    break
+                    # Sleep until tomorrow's first session (02:00 UTC = 07:30 IST) instead of shutting down
+                    now_utc = datetime.now(timezone.utc)
+                    next_start = now_utc.replace(hour=2, minute=0, second=0, microsecond=0)
+                    if next_start <= now_utc:
+                        next_start = next_start + timedelta(days=1)
+                    sleep_secs = int((next_start - now_utc).total_seconds())
+                    logger.info("EOD done — sleeping %.0f min until 02:00 UTC (07:30 IST) for next session.", sleep_secs / 60)
+                    time.sleep(sleep_secs)
+                    daily_summary_sent = False   # reset for new day
 
             except Exception as exc:
                 logger.exception("Unhandled exception in bot tick: %s", exc)

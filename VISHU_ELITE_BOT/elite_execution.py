@@ -89,7 +89,7 @@ def is_kill_zone(symbol: str) -> Tuple[bool, str]:
             if s <= now_m <= e:
                 return True, z["name"]
         ist_now = (now_utc + IST).strftime("%H:%M IST")
-        logger.info("[%s] Outside kill zones at %s — trade fires anyway", symbol, ist_now)
+        logger.info("[%s] Outside kill zones at %s — waiting for KZ", symbol, ist_now)
         return False, ""
     except Exception as exc:
         logger.error("is_kill_zone error: %s", exc)

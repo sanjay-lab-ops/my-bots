@@ -64,6 +64,26 @@ def in_session(symbol: str) -> bool:
     return False
 
 
+def _session_just_opened(symbol: str, wait_minutes: int = 15) -> bool:
+    """
+    Return True if we are within `wait_minutes` of any session opening for this symbol.
+    Prevents entering trades at the exact session open when institutions sweep
+    liquidity in both directions before the real move begins (London open trap).
+    Gold: 05:00 UTC (London open) is the most dangerous — wait 15 min.
+    BTC/ETH: 03:30 and 12:00 UTC — wait 15 min for direction to establish.
+    """
+    now_utc = datetime.now(timezone.utc)
+    h, m    = now_utc.hour, now_utc.minute
+    total_m = h * 60 + m
+
+    for sess in SESSIONS.get(symbol, []):
+        sh, sm  = sess["start_utc"]
+        start_m = sh * 60 + sm
+        if start_m <= total_m < start_m + wait_minutes:
+            return True
+    return False
+
+
 def session_just_ended(symbol: str, window_minutes: int = 30) -> bool:
     """
     Returns True if a session ended within the last `window_minutes` for this symbol.
@@ -144,18 +164,29 @@ def evaluate(
         sig.reason = "Outside trading session"
         return sig
 
+    # ── 0b. Session open delay — wait 15 min after open ─────────
+    # London open (Gold 05:00 UTC) and crypto opens are prime manipulation windows.
+    # Institutions sweep liquidity both ways before the real move. Never enter first 15 min.
+    if _session_just_opened(symbol, wait_minutes=15):
+        sig.reason = "Session just opened — waiting 15 min for direction to establish (avoid open trap)"
+        return sig
+
     # ── 1. Run indicators on all timeframes ─────────────────────
     df_4h  = full_analysis(df_4h)
     df_1h  = full_analysis(df_1h)
     df_15m = full_analysis(df_15m)
     df_1m  = add_emas(df_1m)        # only need EMAs on 1m for cross trigger
 
-    last_4h = df_4h.iloc[-1]
+    last_4h  = df_4h.iloc[-1]
+    last_15m = df_15m.iloc[-1]
 
-    # ── 2. 4H VWAP / PVWAP bias ─────────────────────────────────
-    vwap  = last_4h.get("vwap",  float("nan"))
-    pvwap = last_4h.get("pvwap", float("nan"))
-    price = last_4h["close"]
+    # ── 2. VWAP / PVWAP bias from 15M (more data points than 4H) ─
+    # BUG FIX: config says VWAP_TIMEFRAME=M15 but code was using 4H.
+    # At session open, 4H VWAP only has 1-2 candles — meaningless.
+    # 15M VWAP has 20+ candles by London open and gives a real intraday anchor.
+    vwap  = last_15m.get("vwap",  float("nan"))
+    pvwap = last_15m.get("pvwap", float("nan"))
+    price = bid_price   # compare live price against intraday VWAP
 
     import math
     if math.isnan(vwap) or math.isnan(pvwap):

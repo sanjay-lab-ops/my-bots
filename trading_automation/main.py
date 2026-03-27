@@ -98,10 +98,10 @@ def any_session_active() -> bool:
 
 
 def session_ends_soon() -> bool:
-    """Return True if all sessions for today are finished (after 9:00 PM IST = 15:30 UTC)."""
+    """Return True if all sessions for today are finished (after 9:30 PM IST = 16:00 UTC)."""
     now_utc = datetime.now(timezone.utc)
-    # Last session ends at 15:30 UTC (9:00 PM IST) — bot shuts down after that
-    return now_utc.hour > 15 or (now_utc.hour == 15 and now_utc.minute >= 30)
+    # Last session ends at 16:00 UTC (21:30 IST) — was wrongly set to 15:30, losing 30 min of trades
+    return now_utc.hour >= 16
 
 
 def reset_daily_state():
@@ -143,6 +143,10 @@ def bot_tick(bypass_session: bool = False):
     if is_paused():
         logger.info("Bot PAUSED — managing open positions only, skipping new trade scan")
         return
+
+    # ETH/BTC and XAG/XAU correlation trackers
+    _btc_action = None
+    _xau_action = None
 
     for symbol in SYMBOLS:
         mt5_sym = SYMBOLS[symbol]["mt5_symbol"]
@@ -204,6 +208,27 @@ def bot_tick(bypass_session: bool = False):
         # ── Evaluate strategy ────────────────────────────────────
         signal = evaluate(symbol, df_4h, df_1h, df_15m, df_1m, bid)
 
+        # ── ETH/BTC and XAG/XAU correlation filters ─────────────
+        if symbol == "BTCUSD" and signal.action != "skip":
+            _btc_action = signal.action
+        elif symbol == "ETHUSD" and _btc_action and signal.action != "skip":
+            if signal.action != _btc_action:
+                logger.info(
+                    "ETH/BTC CORRELATION SKIP [ETHUSD]: BTC=%s but ETH=%s — skipping",
+                    _btc_action.upper(), signal.action.upper()
+                )
+                continue
+        _xag_divergence = False
+        if symbol == "XAUUSD" and signal.action != "skip":
+            _xau_action = signal.action
+        elif symbol == "XAGUSD" and _xau_action and signal.action != "skip":
+            if signal.action != _xau_action:
+                _xag_divergence = True
+                logger.info(
+                    "XAG/XAU DIVERGENCE [XAGUSD]: XAU=%s but XAG=%s — trading min lot 0.01",
+                    _xau_action.upper(), signal.action.upper()
+                )
+
         logger.info("%s signal: %s | %s", symbol, signal.action.upper(), signal.reason)
         for conf in signal.confirmations:
             logger.info("  └ %s", conf)
@@ -240,6 +265,10 @@ def bot_tick(bypass_session: bool = False):
             continue
         lot = round(raw_lot * news_lot_mult, 2)
         lot = max(SYMBOLS[symbol].get("min_lot", 0.01), lot)
+        # XAG divergence from XAU — cap at minimum lot to limit risk
+        if symbol == "XAGUSD" and _xag_divergence:
+            lot = SYMBOLS[symbol].get("min_lot", 0.01)
+            logger.info("XAG DIVERGENCE LOT CAP: using min lot %.2f (XAU disagreement)", lot)
         atr_adjusted = signal.atr_4h * news_sl_mult
         sl, tp = calculate_sl_tp(signal.action, signal.entry_price, atr_adjusted, symbol)
 

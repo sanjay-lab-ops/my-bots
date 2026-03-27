@@ -41,18 +41,28 @@ def calculate_lot(balance: float, symbol: str, atr_4h: float = None,
     else:
         # ── Safe fixed tiers (pair-specific) ────────────────────
         if symbol == "BTCUSD":
-            if balance <= 200:    raw = 0.01
-            elif balance <= 500:  raw = 0.02
-            elif balance <= 1000: raw = 0.05
-            elif balance <= 2000: raw = 0.10
-            elif balance <= 5000: raw = 0.25
-            else:                 raw = balance * 0.0001  # ~0.01% balance
-        else:  # XAUUSD — always conservative (contract_size=100)
+            if balance <= 100:    raw = 0.01
+            elif balance <= 300:  raw = 0.02
+            elif balance <= 600:  raw = 0.05
+            elif balance <= 1000: raw = 0.10
+            elif balance <= 2000: raw = 0.20
+            elif balance <= 5000: raw = 0.50
+            else:                 raw = 1.0
+        elif symbol == "ETHUSD":
+            if balance <= 100:    raw = 0.1
+            elif balance <= 300:  raw = 0.2
+            elif balance <= 600:  raw = 0.3
+            elif balance <= 1000: raw = 0.5
+            elif balance <= 2000: raw = 1.0
+            else:                 raw = 2.0
+        elif symbol == "XAUUSD":
             if balance <= 500:    raw = 0.01
-            elif balance <= 1000: raw = 0.01
-            elif balance <= 2000: raw = 0.02
-            elif balance <= 5000: raw = 0.05
-            else:                 raw = balance * 0.00001
+            elif balance <= 800:  raw = 0.02
+            elif balance <= 1200: raw = 0.03
+            else:                 raw = 0.05   # max 0.05 — safe for all balance levels
+        else:  # XAGUSD — contract_size=5000, very sensitive, keep lots tiny
+            if balance <= 2000:   raw = 0.01
+            else:                 raw = 0.02   # max 0.02 — 0.05 risks $800+ at small SL
 
     # ── Target-aware boost ───────────────────────────────────────
     # If expected profit is too small (< MIN_PROFIT_TARGET), boost lot
@@ -64,14 +74,20 @@ def calculate_lot(balance: float, symbol: str, atr_4h: float = None,
             boosted = MIN_PROFIT_TARGET / (tp_distance * contract_size) if tp_distance > 0 else raw
             raw = min(boosted, raw * 2)   # never more than 2× the risk-based lot
 
-    # ── Risk warning (Silver blocked via MIN_BALANCE_TO_TRADE in config) ──
+    # ── Hard risk cap — block trade if minimum lot risks > 50% of balance ──
+    # Gold 0.01 lot = $94-160 risk. At $50 balance that is 188-320% — account wipe guaranteed.
+    # Bot returns 0 here → main.py sees lot=0 and skips the trade entirely.
     if atr_4h and atr_4h > 0 and balance > 0:
         min_lot_risk_pct = (min_lot * atr_4h * ATR_SL_MULTIPLIER * contract_size / balance) * 100
-        if min_lot_risk_pct > 20:
+        if min_lot_risk_pct > 50:
             logger.warning(
-                "HIGH RISK WARNING [%s]: min lot risks %.1f%% of $%.2f",
+                "TRADE BLOCKED [%s]: min lot 0.01 risks %.1f%% of $%.2f balance — "
+                "need $%.0f to safely trade this pair (currently have $%.2f)",
                 symbol, min_lot_risk_pct, balance,
+                (min_lot * atr_4h * ATR_SL_MULTIPLIER * contract_size / 0.20),
+                balance,
             )
+            return 0   # signals main.py to skip this trade
 
     # ── Apply day multiplier (Friday = 0.5, Monday = 0.0) ────────
     raw = raw * day_lot_multiplier

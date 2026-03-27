@@ -265,6 +265,10 @@ def run():
             # ── Scan each pair ───────────────────────────────────────
             print(f"\n  [{ist_time()}] Scanning 4 pairs... Balance=${balance:.2f}")
 
+            # ETH/BTC and XAG/XAU correlation trackers
+            _btc_smc_direction = None
+            _xau_smc_direction = None
+
             for symbol in ["BTCUSD", "ETHUSD", "XAUUSD", "XAGUSD"]:
                 cfg     = SYMBOLS[symbol]
                 mt5_sym = cfg["mt5_symbol"]
@@ -364,6 +368,21 @@ def run():
                     print(f"    {symbol}: FORCED_BIAS={forced.upper()} override applied")
                 else:
                     print(f"    {symbol}: {trend.upper()} | {structure['structure_note']}")
+
+                # ETH/BTC and XAG/XAU correlation filters
+                if symbol == "BTCUSD":
+                    _btc_smc_direction = direction
+                elif symbol == "ETHUSD" and _btc_smc_direction and direction != _btc_smc_direction:
+                    print(f"    ETHUSD: CORRELATION SKIP — BTC={_btc_smc_direction.upper()} "
+                          f"but ETH={direction.upper()} — skipping")
+                    continue
+                _xag_smc_divergence = False
+                if symbol == "XAUUSD":
+                    _xau_smc_direction = direction
+                elif symbol == "XAGUSD" and _xau_smc_direction and direction != _xau_smc_direction:
+                    _xag_smc_divergence = True
+                    print(f"    XAGUSD: DIVERGENCE — XAU={_xau_smc_direction.upper()} "
+                          f"but XAG={direction.upper()} — trading min lot 0.01")
 
                 # ── Counter-trend bounce check ───────────────────────
                 # When price sweeps a major swing low/high (liquidity grab),
@@ -487,6 +506,10 @@ def run():
                 if lot <= 0:
                     print(f"    {symbol}: Account too small — skip")
                     continue
+                # XAG divergence from XAU — cap at min lot to limit risk
+                if symbol == "XAGUSD" and _xag_smc_divergence:
+                    lot = cfg.get("min_lot", 0.01)
+                    print(f"    {symbol}: DIVERGENCE LOT CAP → 0.01 (XAU disagreement)")
 
                 # ── Elite: Kill zone + Market state + Sweep check ────────
                 try:
@@ -499,6 +522,15 @@ def run():
                           f"{'🎯 SWEEP ENTRY' if sweep else 'Limit entry'}")
                     if sweep:
                         print(f"    {symbol}: {sw_msg}")
+
+                    # ── Kill zone gate — no new trades in dead zones ──────
+                    # Dead zones: 05:00-07:00 UTC, 12:00-13:00 UTC, 17:00-24:00 UTC
+                    # Trades placed in dead zones get caught by bank manipulation at next open.
+                    # Only allow entry during kill zones OR if a liquidity sweep is detected.
+                    if not in_kz and not sweep:
+                        print(f"    {symbol}: ⏳ Outside kill zone — waiting for KZ (no dead zone entries)")
+                        continue
+
                     # Adjust lot for market state
                     state_mult = {"TRENDING": 1.0, "CONSOLIDATING": 0.7, "VOLATILE": 1.2}.get(state, 1.0)
                     lot = round(lot * state_mult, 2)

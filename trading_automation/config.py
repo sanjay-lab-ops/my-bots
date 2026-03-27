@@ -125,7 +125,7 @@ DAILY_LOSS_LIMIT  = -9999.0  # Disabled — change to e.g. -0.30 to stop at 30% 
 MIN_BALANCE_TO_TRADE = {
     "ETHUSD": 50,    # safe from $50
     "BTCUSD": 50,    # safe from $50
-    "XAUUSD": 50,    # safe from $50
+    "XAUUSD": 50,    # Hard risk cap enforced in risk_engine.py — blocks trade if min lot > 50% balance
     "XAGUSD": 200,   # Silver blocked until $200 balance
 }
 

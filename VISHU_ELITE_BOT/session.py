@@ -103,6 +103,21 @@ def all_sessions_done_for_day() -> bool:
     return True
 
 
+def session_just_opened(symbol: str, wait_minutes: int = 15) -> bool:
+    """
+    Return True if we are within `wait_minutes` of any session opening for this symbol.
+    Prevents entering at the exact open when institutions sweep liquidity both ways.
+    Gold 05:00 UTC (London open) is the most dangerous — wait 15 min before first entry.
+    """
+    total_m = _now_utc_minutes()
+    for sess in SESSIONS.get(symbol, []):
+        sh, sm  = sess["start_utc"]
+        start_m = sh * 60 + sm
+        if start_m <= total_m < start_m + wait_minutes:
+            return True
+    return False
+
+
 def get_session_key(symbol: str) -> str:
     """
     Return a unique key for the current session window.
