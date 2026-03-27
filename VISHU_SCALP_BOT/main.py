@@ -376,29 +376,86 @@ def run():
                 time.sleep(LOOP_INTERVAL)
                 continue
 
-            # ── Scan all 4 symbols ─────────────────────────────────
+            # ── Scan all 4 symbols — full analysis every tick ──────────
+            log.info("── SCAN [%s] | KZ: %s | Balance: $%.2f ──",
+                     ist_now(), kz_name, balance)
             for symbol, cfg in SYMBOLS.items():
                 mt5_sym = cfg["mt5_symbol"]
 
+                # Balance check
                 if balance < cfg["min_balance"]:
+                    log.info("  %s: balance $%.2f below min — skip", symbol, balance)
                     continue
 
+                # Already in trade
                 if has_position(mt5_sym):
+                    pos = mt5.positions_get(symbol=mt5_sym)
+                    if pos:
+                        p = pos[0]
+                        log.info("  %s: OPEN trade #%d | P&L: $%.2f | Price: %.5f",
+                                 symbol, p.ticket, p.profit, p.price_current)
                     continue
 
-                # Dual timeframe confirmation — 1H + 15M must agree
-                bias = get_confirmed_bias(mt5_sym)
-                if not bias:
-                    log.info("%s: 1H/15M disagree — skip (low confidence)", symbol)
+                # Get raw bias per timeframe
+                bias_1h  = get_bias(mt5_sym, mt5.TIMEFRAME_H1,  80)
+                bias_15m = get_bias(mt5_sym, mt5.TIMEFRAME_M15, 60)
+
+                # Get indicator values for analysis
+                df1h  = get_candles(mt5_sym, mt5.TIMEFRAME_H1,  80)
+                df15m = get_candles(mt5_sym, mt5.TIMEFRAME_M15, 60)
+                df1m  = get_candles(mt5_sym, mt5.TIMEFRAME_M1,  40)
+
+                tick = mt5.symbol_info_tick(mt5_sym)
+                price = tick.ask if tick else 0
+
+                if df1h is not None and df15m is not None and df1m is not None:
+                    rsi_val  = df1m.iloc[-1]["rsi"]
+                    atr_val  = df1m.iloc[-1]["atr"]
+                    e5_1h    = df1h.iloc[-1]["ema_fast"]
+                    e20_1h   = df1h.iloc[-1]["ema_slow"]
+                    e5_15m   = df15m.iloc[-1]["ema_fast"]
+                    e20_15m  = df15m.iloc[-1]["ema_slow"]
+                    e5_1m    = df1m.iloc[-1]["ema_fast"]
+                    e20_1m   = df1m.iloc[-1]["ema_slow"]
+                    cross_1m = "↑CROSS" if (df1m.iloc[-2]["ema_fast"] <= df1m.iloc[-2]["ema_slow"]
+                                             and e5_1m > e20_1m) else \
+                               "↓CROSS" if (df1m.iloc[-2]["ema_fast"] >= df1m.iloc[-2]["ema_slow"]
+                                             and e5_1m < e20_1m) else "no cross"
+
+                    log.info("  %s | Price=%.5f | RSI=%.1f | ATR=%.5f",
+                             symbol, price, rsi_val, atr_val)
+                    log.info("    1H  EMA5=%.5f EMA20=%.5f → %s",
+                             e5_1h, e20_1h, bias_1h or "NEUTRAL")
+                    log.info("    15M EMA5=%.5f EMA20=%.5f → %s",
+                             e5_15m, e20_15m, bias_15m or "NEUTRAL")
+                    log.info("    1M  EMA5=%.5f EMA20=%.5f → %s",
+                             e5_1m, e20_1m, cross_1m)
+
+                # Dual confirmation check
+                if not bias_1h or not bias_15m:
+                    log.info("    ❌ SKIP — no clear bias on 1H or 15M")
                     continue
+                if bias_1h != bias_15m:
+                    log.info("    ❌ SKIP — 1H=%s vs 15M=%s (conflict)", bias_1h, bias_15m)
+                    continue
+
+                bias = bias_1h
+                log.info("    ✅ BIAS CONFIRMED — both 1H+15M = %s", bias)
 
                 # 1M entry signal
                 direction, sl, tp = get_1m_entry(mt5_sym, bias)
                 if not direction:
+                    log.info("    ⏳ WAITING — no 1M cross yet (bias ready, watching...)")
                     continue
 
-                # Lot size
-                tick = mt5.symbol_info_tick(mt5_sym)
+                # RSI check result
+                if df1m is not None:
+                    rsi_val = df1m.iloc[-1]["rsi"]
+                    log.info("    RSI=%.1f — %s", rsi_val,
+                             "OK" if (direction == "BUY" and rsi_val < RSI_BUY_MAX) or
+                                     (direction == "SELL" and rsi_val > RSI_SELL_MIN)
+                             else "BLOCKED by RSI")
+
                 if not tick:
                     continue
                 entry_price = tick.ask if direction == "BUY" else tick.bid
@@ -407,24 +464,27 @@ def run():
                     continue
 
                 lot = calc_lot(balance, sl_pts, cfg)
+                risk_usd   = sl_pts * lot * cfg["contract_size"]
+                reward_usd = risk_usd * RR_RATIO
 
-                log.info("[%s] 🎯 %s %s | Bias 1H+15M=%s | KZ=%s | Lot=%.2f",
-                         ist_now(), direction, symbol, bias, kz_name, lot)
+                log.info("    🎯 ENTRY | %s | Lot=%.2f | Entry=%.5f | SL=%.5f | TP=%.5f",
+                         direction, lot, entry_price, sl, tp)
+                log.info("    💰 Risk=$%.2f → Target=$%.2f (1:%.1f RR)",
+                         risk_usd, reward_usd, RR_RATIO)
 
                 ticket = place_order(mt5_sym, direction, lot, sl, tp)
                 if ticket:
                     trades_today += 1
-                    risk_usd    = sl_pts * lot * cfg["contract_size"]
-                    reward_usd  = risk_usd * RR_RATIO
                     tg(
                         f"⚡ SCALP #{trades_today} — {direction} {symbol}\n"
-                        f"Lot: {lot} | KZ: {kz_name}\n"
-                        f"Bias: 1H+15M both {bias}\n"
+                        f"Entry: {entry_price:.5f} | Lot: {lot}\n"
+                        f"SL: {sl:.5f} | TP: {tp:.5f}\n"
                         f"Risk: ${risk_usd:.2f} → Target: ${reward_usd:.2f}\n"
-                        f"Balance: ${balance:.2f}"
+                        f"1H: {bias_1h} | 15M: {bias_15m} | RSI: {rsi_val:.1f}\n"
+                        f"KZ: {kz_name} | Balance: ${balance:.2f}"
                     )
                     time.sleep(10)
-                    break  # only 1 trade at a time — break after placing
+                    break
 
             time.sleep(LOOP_INTERVAL)
 
