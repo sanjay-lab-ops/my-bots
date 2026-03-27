@@ -55,7 +55,7 @@ SYMBOLS = {
 
 # ── Risk / Compounding ────────────────────────────────────────────
 RISK_PERCENT     = 1.5     # % of CURRENT balance per trade — compounds automatically
-DAILY_LOSS_LIMIT = -9999.0   # Disabled — let trades run freely
+DAILY_LOSS_LIMIT = -6.0      # Stop trading today if down 6% (3 losses at 2% each)
 RR_RATIO         = 2.5     # 2.5:1 reward:risk (institutional standard)
 
 # ── Manual Mode ───────────────────────────────────────────────────

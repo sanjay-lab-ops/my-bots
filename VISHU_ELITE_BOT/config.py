@@ -93,7 +93,7 @@ EMA_SLOW    = 20
 # ── Risk Parameters ───────────────────────────────────────────────
 ATR_SL_MULT      = 1.5    # SL = ATR × 1.5
 RR_RATIO         = 2.0    # TP = SL × 2.0  (2:1 R:R)
-DAILY_LOSS_LIMIT = -9999.0   # Disabled — let trades run freely
+DAILY_LOSS_LIMIT = -6.0      # Stop trading today if down 6% (3 losses at 2% each)
 MAX_TRADES_DAY   = 4      # total across both pairs per day
 MAX_TRADES_PAIR  = 2      # per pair per day
 

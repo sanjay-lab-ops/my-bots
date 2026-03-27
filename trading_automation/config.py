@@ -112,7 +112,7 @@ RISK_PERCENT      = RISK_PERCENT_MAP[RISK_MODE]
 ATR_SL_MULTIPLIER = 1.5   # SL = 1.5 × ATR
 RR_RATIO          = 2.0   # TP = SL × 2 (2:1 R:R) — let price run, trailing stop protects
 MAX_TRADES_PER_DAY = 4    # max 4 trades total across both pairs per day
-DAILY_LOSS_LIMIT  = -9999.0  # Disabled — change to e.g. -0.30 to stop at 30% daily loss
+DAILY_LOSS_LIMIT  = -6.0     # Stop trading today if down 6% (3 losses at 2% each)
 
 # ── Minimum balance required to trade each symbol ────────────────
 # Protects live accounts from oversized risk on small balances.
