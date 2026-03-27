@@ -316,7 +316,6 @@ def run():
     log.info("  VISHU SCALP BOT — ALL 4 PAIRS")
     log.info("  ETH | BTC | XAU | XAG")
     log.info("  Confirm: 1H + 15M bias must agree")
-    log.info("  Lock: %d min pause after any loss", LOCK_AFTER_LOSS_MINUTES)
     log.info("=" * 60)
 
     if not connect_mt5():
