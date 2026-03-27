@@ -87,6 +87,14 @@ TRAIL_MULT      = 0.5
 # ── Dual TF confirm ────────────────────────────────────────────────
 REQUIRE_1H_CONFIRM = True   # 1H + 15M must agree
 
+# ── Sessions (label only — no blocking, bot runs 24/7) ────────────
+KILL_ZONES = [
+    {"name": "Asian Open",   "start": (0,  0),  "end": (2,  0)},
+    {"name": "London Open",  "start": (7,  0),  "end": (9,  30)},
+    {"name": "NY Open",      "start": (12, 0),  "end": (15, 0)},
+    {"name": "London Close", "start": (15, 0),  "end": (16, 30)},
+]
+
 # ── Bot Speed ──────────────────────────────────────────────────────
 MAGIC_NUMBER    = 20260327
 LOOP_INTERVAL   = 5        # scan every 5 seconds — high frequency
