@@ -68,7 +68,7 @@ RR_RATIO         = 1.0    # 1:1 RR — small TP hit fast in seconds
 
 # ── Scalp Speed Settings ───────────────────────────────────────────
 ATR_PERIOD      = 5       # very short ATR — reacts to latest price action
-ATR_SL_MULT     = 0.4    # super tight SL = 0.4 × ATR
+ATR_SL_MULT     = 1.0    # SL = 1.0 × ATR — enough to clear broker min distance
 EMA_FAST        = 3       # faster EMA cross signals
 EMA_SLOW        = 8       # faster EMA slow
 RSI_PERIOD      = 7       # faster RSI
