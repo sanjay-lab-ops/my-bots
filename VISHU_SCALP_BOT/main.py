@@ -139,20 +139,17 @@ def get_confirmed_bias(mt5_sym: str) -> str | None:
 
 # ── 1M Entry Signal ────────────────────────────────────────────────
 def get_1m_entry(mt5_sym: str, bias: str) -> tuple:
-    """Returns (direction, sl, tp) or (None, None, None)"""
+    """
+    Entry when 1M EMAs aligned in bias direction AND price moving with it.
+    No waiting for a fresh cross — enters on momentum confirmation.
+    """
     df = get_candles(mt5_sym, mt5.TIMEFRAME_M1, 40)
     if df is None:
         return None, None, None
 
-    prev = df.iloc[-2]
-    last = df.iloc[-1]
-
-    cross_bull = (prev["ema_fast"] <= prev["ema_slow"] and
-                  last["ema_fast"] >  last["ema_slow"])
-    cross_bear = (prev["ema_fast"] >= prev["ema_slow"] and
-                  last["ema_fast"] <  last["ema_slow"])
-
-    tick = mt5.symbol_info_tick(mt5_sym)
+    last  = df.iloc[-1]
+    prev  = df.iloc[-2]
+    tick  = mt5.symbol_info_tick(mt5_sym)
     if not tick:
         return None, None, None
 
@@ -160,12 +157,19 @@ def get_1m_entry(mt5_sym: str, bias: str) -> tuple:
     atr   = last["atr"]
     rsi   = last["rsi"]
 
-    if bias == "BUY" and cross_bull and rsi < RSI_BUY_MAX:
+    ema_aligned_buy  = last["ema_fast"] > last["ema_slow"]
+    ema_aligned_sell = last["ema_fast"] < last["ema_slow"]
+
+    # Price momentum: current candle closing in bias direction
+    momentum_up   = last["close"] > prev["close"]
+    momentum_down = last["close"] < prev["close"]
+
+    if bias == "BUY" and ema_aligned_buy and momentum_up and rsi < RSI_BUY_MAX:
         sl = price - atr * ATR_SL_MULT
         tp = price + atr * ATR_SL_MULT * RR_RATIO
         return "BUY", sl, tp
 
-    if bias == "SELL" and cross_bear and rsi > RSI_SELL_MIN:
+    if bias == "SELL" and ema_aligned_sell and momentum_down and rsi > RSI_SELL_MIN:
         sl = price + atr * ATR_SL_MULT
         tp = price - atr * ATR_SL_MULT * RR_RATIO
         return "SELL", sl, tp
@@ -448,10 +452,8 @@ def run():
                     e20_15m  = df15m.iloc[-1]["ema_slow"]
                     e5_1m    = df1m.iloc[-1]["ema_fast"]
                     e20_1m   = df1m.iloc[-1]["ema_slow"]
-                    cross_1m = "↑CROSS" if (df1m.iloc[-2]["ema_fast"] <= df1m.iloc[-2]["ema_slow"]
-                                             and e5_1m > e20_1m) else \
-                               "↓CROSS" if (df1m.iloc[-2]["ema_fast"] >= df1m.iloc[-2]["ema_slow"]
-                                             and e5_1m < e20_1m) else "no cross"
+                    cross_1m = "EMA↑ aligned" if e5_1m > e20_1m else \
+                               "EMA↓ aligned" if e5_1m < e20_1m else "flat"
 
                     log.info("  %s | Price=%.5f | RSI=%.1f | ATR=%.5f",
                              symbol, price, rsi_val, atr_val)
@@ -476,7 +478,7 @@ def run():
                 # 1M entry signal
                 direction, sl, tp = get_1m_entry(mt5_sym, bias)
                 if not direction:
-                    log.info("    ⏳ WAITING — no 1M cross yet (bias ready, watching...)")
+                    log.info("    ⏳ WAITING — 1M EMA not aligned or no momentum yet")
                     continue
 
                 # RSI check result
