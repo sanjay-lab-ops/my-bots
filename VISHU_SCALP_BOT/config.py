@@ -1,7 +1,6 @@
 """
-VISHU SCALP BOT — Configuration
-Strategy : 1H + 15M bias agreement → 1M EMA cross entry
-Pairs    : ETHUSD, BTCUSD, XAUUSD, XAGUSD
+VISHU SCALP BOT — High Frequency Config
+Enter fast, exit in seconds, repeat all day
 """
 
 import os
@@ -27,6 +26,7 @@ SYMBOLS = {
         "max_lot":       2.0,
         "digits":        2,
         "min_balance":   30,
+        "force_min_lot": False,
     },
     "BTCUSD": {
         "mt5_symbol":    "BTCUSDm",
@@ -36,23 +36,24 @@ SYMBOLS = {
         "max_lot":       0.1,
         "digits":        2,
         "min_balance":   30,
+        "force_min_lot": False,
     },
     "XAUUSD": {
         "mt5_symbol":    "XAUUSDm",
         "contract_size": 100,
         "min_lot":       0.01,
         "lot_step":      0.01,
-        "max_lot":       0.01,   # capped at min lot — gold too expensive per point
+        "max_lot":       0.01,
         "digits":        2,
         "min_balance":   30,
-        "force_min_lot": True,   # always use min lot regardless of calc
+        "force_min_lot": True,
     },
     "XAGUSD": {
         "mt5_symbol":    "XAGUSDm",
         "contract_size": 5000,
         "min_lot":       0.01,
         "lot_step":      0.01,
-        "max_lot":       0.01,   # capped at min lot
+        "max_lot":       0.01,
         "digits":        3,
         "min_balance":   30,
         "force_min_lot": True,
@@ -60,42 +61,33 @@ SYMBOLS = {
 }
 
 # ── Risk ───────────────────────────────────────────────────────────
-RISK_PERCENT      = 1.0     # 1% per trade
-DAILY_LOSS_LIMIT  = -6.0    # stop at -6% for the day
-MAX_TRADES_DAY    = 9999    # no limit — trades as many signals as appear
-MAX_OPEN          = 1       # only 1 open trade at a time (safety on $50)
-RR_RATIO          = 1.5     # 1.5:1 RR — quick scalp TP
+RISK_PERCENT     = 1.0    # 1% per trade
+DAILY_LOSS_LIMIT = -6.0   # stop at -6% for the day
+MAX_OPEN         = 2      # 2 trades open at once across all symbols
+RR_RATIO         = 1.0    # 1:1 RR — small TP hit fast in seconds
 
-# No loss lock — bot keeps trading every valid signal continuously
+# ── Scalp Speed Settings ───────────────────────────────────────────
+ATR_PERIOD      = 5       # very short ATR — reacts to latest price action
+ATR_SL_MULT     = 0.4    # super tight SL = 0.4 × ATR
+EMA_FAST        = 3       # faster EMA cross signals
+EMA_SLOW        = 8       # faster EMA slow
+RSI_PERIOD      = 7       # faster RSI
+RSI_BUY_MAX     = 70      # wider RSI range for more signals
+RSI_SELL_MIN    = 30
 
-# ── Indicators ─────────────────────────────────────────────────────
-ATR_PERIOD    = 10
-ATR_SL_MULT   = 1.2      # tight SL for scalping
-EMA_FAST      = 5
-EMA_SLOW      = 20
-RSI_PERIOD    = 14
-RSI_BUY_MAX   = 63        # stricter — no buy if RSI overbought
-RSI_SELL_MIN  = 37        # stricter — no sell if RSI oversold
+# ── Time Exit — close trade after N minutes if TP/SL not hit ──────
+# Prevents trades sitting open for hours eating spread
+MAX_TRADE_MINUTES = 5     # close trade after 5 minutes regardless
 
-# ── Confirmation — BOTH timeframes must agree for entry ────────────
-# 1H EMA bias + 15M EMA bias must point same direction
-# Eliminates low-confidence trades — only takes high-probability setups
-REQUIRE_1H_CONFIRM = True
+# ── Breakeven + Trail ──────────────────────────────────────────────
+BREAKEVEN_PCT   = 0.5
+TRAIL_PCT       = 0.8
+TRAIL_MULT      = 0.5
 
-# ── Trade Manager ──────────────────────────────────────────────────
-BREAKEVEN_PCT = 0.5
-TRAIL_PCT     = 0.75
-TRAIL_MULT    = 0.6
+# ── Dual TF confirm ────────────────────────────────────────────────
+REQUIRE_1H_CONFIRM = True   # 1H + 15M must agree
 
-# ── Kill Zones (UTC) ───────────────────────────────────────────────
-KILL_ZONES = [
-    {"name": "Asian Open",   "start": (0,  0),  "end": (2,  0)},   # 05:30–07:30 IST
-    {"name": "London Open",  "start": (7,  0),  "end": (9,  30)},  # 12:30–15:00 IST
-    {"name": "NY Open",      "start": (12, 0),  "end": (15, 0)},   # 17:30–20:30 IST
-    {"name": "London Close", "start": (15, 0),  "end": (16, 30)},  # 20:30–22:00 IST
-]
-
-# ── Bot ────────────────────────────────────────────────────────────
-MAGIC_NUMBER  = 20260327
-LOOP_INTERVAL = 15
-LOG_FILE      = "scalp_bot.log"
+# ── Bot Speed ──────────────────────────────────────────────────────
+MAGIC_NUMBER    = 20260327
+LOOP_INTERVAL   = 5        # scan every 5 seconds — high frequency
+LOG_FILE        = "scalp_bot.log"

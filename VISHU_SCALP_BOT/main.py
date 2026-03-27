@@ -296,6 +296,43 @@ def manage_open_trades():
             })
 
 
+# ── Time-based Exit — close trades open too long ───────────────────
+def _close_stale_trades():
+    """Close any bot trade open longer than MAX_TRADE_MINUTES — grab what we have."""
+    positions = mt5.positions_get()
+    if not positions:
+        return
+    now = datetime.now(timezone.utc)
+    for pos in positions:
+        if pos.magic != MAGIC_NUMBER:
+            continue
+        open_time = datetime.fromtimestamp(pos.time, tz=timezone.utc)
+        age_mins  = (now - open_time).total_seconds() / 60
+        if age_mins >= MAX_TRADE_MINUTES:
+            tick = mt5.symbol_info_tick(pos.symbol)
+            if not tick:
+                continue
+            close_price = tick.bid if pos.type == mt5.ORDER_TYPE_BUY else tick.ask
+            req = {
+                "action":       mt5.TRADE_ACTION_DEAL,
+                "symbol":       pos.symbol,
+                "volume":       pos.volume,
+                "type":         mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY,
+                "price":        close_price,
+                "position":     pos.ticket,
+                "deviation":    20,
+                "magic":        MAGIC_NUMBER,
+                "comment":      "SCALP_TIMEOUT",
+                "type_filling": mt5.ORDER_FILLING_IOC,
+            }
+            result = mt5.order_send(req)
+            if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+                log.info("⏱ TIMEOUT CLOSE | %s #%d | P&L=$%.2f | Age=%.1fmin",
+                         pos.symbol, pos.ticket, pos.profit, age_mins)
+                tg(f"⏱ TIMEOUT EXIT\n{pos.symbol} #{pos.ticket}\n"
+                   f"P&L: ${pos.profit:.2f} | Was open {age_mins:.1f}min")
+
+
 # ── Telegram ───────────────────────────────────────────────────────
 def tg(msg: str):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
@@ -362,10 +399,13 @@ def run():
             # ── Manage existing trades ─────────────────────────────
             manage_open_trades()
 
-            # ── Max 1 open trade at a time ─────────────────────────
+            # ── Max open trades gate ───────────────────────────────
             if open_trade_count() >= MAX_OPEN:
                 time.sleep(LOOP_INTERVAL)
                 continue
+
+            # ── Time-based exit — close stale trades ───────────────
+            _close_stale_trades()
 
             # ── Scan all 4 symbols — full analysis every tick ──────────
             log.info("── SCAN [%s] | %s | Balance: $%.2f ──",
@@ -474,8 +514,7 @@ def run():
                         f"1H: {bias_1h} | 15M: {bias_15m} | RSI: {rsi_val:.1f}\n"
                         f"Session: {kz_label} | Balance: ${balance:.2f}"
                     )
-                    time.sleep(10)
-                    break
+                    break  # placed — continue scanning other symbols next tick
 
             time.sleep(LOOP_INTERVAL)
 
