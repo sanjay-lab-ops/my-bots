@@ -164,12 +164,16 @@ def get_1m_entry(mt5_sym: str, bias: str) -> tuple:
     momentum_up   = last["close"] > prev["close"]
     momentum_down = last["close"] < prev["close"]
 
-    if bias == "BUY" and ema_aligned_buy and momentum_up and rsi < RSI_BUY_MAX:
+    # BUY: RSI in oversold zone (20–45) — price has room to bounce UP
+    if (bias == "BUY" and ema_aligned_buy and momentum_up
+            and RSI_BUY_MIN < rsi < RSI_BUY_MAX):
         sl = price - atr * ATR_SL_MULT
         tp = price + atr * ATR_SL_MULT * RR_RATIO
         return "BUY", sl, tp
 
-    if bias == "SELL" and ema_aligned_sell and momentum_down and rsi > RSI_SELL_MIN:
+    # SELL: RSI in overbought zone (55–80) — price has room to fall DOWN
+    if (bias == "SELL" and ema_aligned_sell and momentum_down
+            and RSI_SELL_MIN < rsi < RSI_SELL_MAX):
         sl = price + atr * ATR_SL_MULT
         tp = price - atr * ATR_SL_MULT * RR_RATIO
         return "SELL", sl, tp
@@ -484,10 +488,13 @@ def run():
                 # RSI check result
                 if df1m is not None:
                     rsi_val = df1m.iloc[-1]["rsi"]
-                    log.info("    RSI=%.1f — %s", rsi_val,
-                             "OK" if (direction == "BUY" and rsi_val < RSI_BUY_MAX) or
-                                     (direction == "SELL" and rsi_val > RSI_SELL_MIN)
-                             else "BLOCKED by RSI")
+                    if direction == "BUY":
+                        rsi_ok = RSI_BUY_MIN < rsi_val < RSI_BUY_MAX
+                        rsi_zone = f"oversold ✅" if rsi_ok else f"need {RSI_BUY_MIN}–{RSI_BUY_MAX} ❌"
+                    else:
+                        rsi_ok = RSI_SELL_MIN < rsi_val < RSI_SELL_MAX
+                        rsi_zone = f"overbought ✅" if rsi_ok else f"need {RSI_SELL_MIN}–{RSI_SELL_MAX} ❌"
+                    log.info("    RSI=%.1f — %s", rsi_val, rsi_zone)
 
                 if not tick:
                     continue

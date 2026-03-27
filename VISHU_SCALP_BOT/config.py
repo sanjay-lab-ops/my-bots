@@ -71,9 +71,14 @@ ATR_PERIOD      = 5       # very short ATR — reacts to latest price action
 ATR_SL_MULT     = 1.0    # SL = 1.0 × ATR — enough to clear broker min distance
 EMA_FAST        = 3       # faster EMA cross signals
 EMA_SLOW        = 8       # faster EMA slow
-RSI_PERIOD      = 7       # faster RSI
-RSI_BUY_MAX     = 90      # almost no RSI block on buys
-RSI_SELL_MIN    = 10      # almost no RSI block on sells
+RSI_PERIOD      = 7
+# RSI logic — only enter when price has ROOM to move in direction:
+# BUY  → RSI must be LOW  (20–45) — oversold, room to bounce UP
+# SELL → RSI must be HIGH (55–80) — overbought, room to fall DOWN
+RSI_BUY_MIN     = 20      # don't buy if RSI below 20 (too crashed, wait)
+RSI_BUY_MAX     = 45      # only buy when RSI < 45 (oversold zone)
+RSI_SELL_MIN    = 55      # only sell when RSI > 55 (overbought zone)
+RSI_SELL_MAX    = 80      # don't sell if RSI above 80 (too spiked, wait)
 
 # ── Time Exit — close trade after N minutes if TP/SL not hit ──────
 # Prevents trades sitting open for hours eating spread
