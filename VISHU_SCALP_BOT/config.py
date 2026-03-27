@@ -89,6 +89,7 @@ TRAIL_MULT    = 0.6
 
 # ── Kill Zones (UTC) ───────────────────────────────────────────────
 KILL_ZONES = [
+    {"name": "Asian Open",   "start": (0,  0),  "end": (2,  0)},   # 05:30–07:30 IST
     {"name": "London Open",  "start": (7,  0),  "end": (9,  30)},  # 12:30–15:00 IST
     {"name": "NY Open",      "start": (12, 0),  "end": (15, 0)},   # 17:30–20:30 IST
     {"name": "London Close", "start": (15, 0),  "end": (16, 30)},  # 20:30–22:00 IST
