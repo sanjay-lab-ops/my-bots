@@ -1,22 +1,10 @@
 """
-VISHU SCALP BOT
-===============
-Strategy : 15M EMA bias → 1M EMA5×EMA20 crossover entry
-Capital  : $50–$200 live account
-Risk     : 1% per trade | -3% daily stop | 1.5 RR | max 1 open trade
-
-Entry rules:
-  1. 15M EMA5 > EMA20  → BUY bias    | 15M EMA5 < EMA20 → SELL bias
-  2. 1M EMA5 crosses EMA20 in bias direction
-  3. RSI not overbought (BUY) / not oversold (SELL)
-  4. Only inside kill zones (London Open, NY Open, London Close)
-  5. No trade open already on that symbol
-
-Exit rules:
-  - SL: 1.2 × 1M ATR
-  - TP: 1.5 × SL (1.5 RR)
-  - Breakeven: when 50% of TP distance reached
-  - Trail: when 75% of TP reached, trail at 60% of SL distance
+VISHU SCALP BOT — Live $50 Account
+====================================
+Entry  : 1H bias + 15M bias BOTH agree → 1M EMA5×EMA20 cross
+Filter : RSI not extreme | Kill zone only
+Lock   : After any loss → pause LOCK_AFTER_LOSS_MINUTES before next trade
+Exit   : 1.5 RR | Breakeven at 50% | Trail at 75%
 """
 
 import time
@@ -47,7 +35,7 @@ def ist_now() -> str:
     return (datetime.now(timezone.utc) + IST).strftime("%H:%M IST")
 
 
-# ── MT5 Connection ─────────────────────────────────────────────────
+# ── MT5 ────────────────────────────────────────────────────────────
 def connect_mt5() -> bool:
     if not mt5.initialize():
         log.error("MT5 init failed: %s", mt5.last_error())
@@ -95,27 +83,25 @@ def get_candles(symbol: str, tf: int, count: int) -> pd.DataFrame | None:
 
 # ── Kill Zone ──────────────────────────────────────────────────────
 def in_kill_zone() -> tuple[bool, str]:
-    now   = datetime.now(timezone.utc)
-    now_m = now.hour * 60 + now.minute
+    now_m = datetime.now(timezone.utc)
+    m     = now_m.hour * 60 + now_m.minute
     for kz in KILL_ZONES:
         s = kz["start"][0] * 60 + kz["start"][1]
         e = kz["end"][0]   * 60 + kz["end"][1]
-        if s <= now_m <= e:
+        if s <= m <= e:
             return True, kz["name"]
     return False, ""
 
 
-def next_kill_zone_str() -> str:
+def next_kz_str() -> str:
     now   = datetime.now(timezone.utc)
     now_m = now.hour * 60 + now.minute
     for kz in KILL_ZONES:
         s = kz["start"][0] * 60 + kz["start"][1]
         if s > now_m:
             mins  = s - now_m
-            utc_h = kz["start"][0]
-            utc_m = kz["start"][1]
-            ist_h = (utc_h + 5) % 24
-            ist_m = utc_m + 30
+            ist_h = (kz["start"][0] + 5) % 24
+            ist_m = kz["start"][1] + 30
             if ist_m >= 60:
                 ist_h += 1
                 ist_m -= 60
@@ -125,12 +111,12 @@ def next_kill_zone_str() -> str:
 
 def is_friday_cutoff() -> bool:
     now = datetime.now(timezone.utc)
-    return now.weekday() == 4 and now.hour >= 16  # Fri after 16:00 UTC
+    return now.weekday() == 4 and now.hour >= 16
 
 
-# ── Signal ─────────────────────────────────────────────────────────
-def get_bias_15m(mt5_sym: str) -> str | None:
-    df = get_candles(mt5_sym, mt5.TIMEFRAME_M15, 60)
+# ── Bias ───────────────────────────────────────────────────────────
+def get_bias(mt5_sym: str, tf: int, count: int = 60) -> str | None:
+    df = get_candles(mt5_sym, tf, count)
     if df is None:
         return None
     last = df.iloc[-1]
@@ -141,6 +127,18 @@ def get_bias_15m(mt5_sym: str) -> str | None:
     return None
 
 
+def get_confirmed_bias(mt5_sym: str) -> str | None:
+    """Both 1H and 15M must agree. Returns direction or None."""
+    bias_1h  = get_bias(mt5_sym, mt5.TIMEFRAME_H1,  80)
+    bias_15m = get_bias(mt5_sym, mt5.TIMEFRAME_M15, 60)
+    if not bias_1h or not bias_15m:
+        return None
+    if bias_1h == bias_15m:
+        return bias_1h   # both agree — high confidence
+    return None          # disagreement — skip this symbol
+
+
+# ── 1M Entry Signal ────────────────────────────────────────────────
 def get_1m_entry(mt5_sym: str, bias: str) -> tuple:
     """Returns (direction, sl, tp) or (None, None, None)"""
     df = get_candles(mt5_sym, mt5.TIMEFRAME_M1, 40)
@@ -176,8 +174,10 @@ def get_1m_entry(mt5_sym: str, bias: str) -> tuple:
     return None, None, None
 
 
-# ── Lot Calculation ────────────────────────────────────────────────
+# ── Lot ────────────────────────────────────────────────────────────
 def calc_lot(balance: float, sl_pts: float, cfg: dict) -> float:
+    if cfg.get("force_min_lot"):
+        return cfg["min_lot"]
     risk_amt = balance * (RISK_PERCENT / 100)
     raw      = risk_amt / (sl_pts * cfg["contract_size"])
     step     = cfg["lot_step"]
@@ -185,7 +185,7 @@ def calc_lot(balance: float, sl_pts: float, cfg: dict) -> float:
     return max(cfg["min_lot"], min(lot, cfg["max_lot"]))
 
 
-# ── Open Trade Check ───────────────────────────────────────────────
+# ── Position Checks ────────────────────────────────────────────────
 def open_trade_count() -> int:
     positions = mt5.positions_get()
     if not positions:
@@ -200,20 +200,35 @@ def has_position(mt5_sym: str) -> bool:
     return any(p.magic == MAGIC_NUMBER for p in positions)
 
 
+# ── Closed Trade Monitor (for loss detection) ──────────────────────
+def get_last_closed_trade() -> dict | None:
+    """Returns the most recently closed trade by this bot, or None."""
+    now  = datetime.now(timezone.utc)
+    from_dt = now - timedelta(hours=24)
+    deals = mt5.history_deals_get(from_dt, now)
+    if not deals:
+        return None
+    bot_deals = [d for d in deals if d.magic == MAGIC_NUMBER and d.entry == mt5.DEAL_ENTRY_OUT]
+    if not bot_deals:
+        return None
+    last = sorted(bot_deals, key=lambda d: d.time)[-1]
+    return {"profit": last.profit, "time": datetime.fromtimestamp(last.time, tz=timezone.utc)}
+
+
 # ── Order Placement ────────────────────────────────────────────────
-def place_market_order(mt5_sym: str, direction: str, lot: float,
-                       sl: float, tp: float) -> int | None:
+def place_order(mt5_sym: str, direction: str, lot: float,
+                sl: float, tp: float) -> int | None:
     tick = mt5.symbol_info_tick(mt5_sym)
     if not tick:
         return None
 
-    price     = tick.ask if direction == "BUY" else tick.bid
+    info       = mt5.symbol_info(mt5_sym)
+    price      = tick.ask if direction == "BUY" else tick.bid
     order_type = mt5.ORDER_TYPE_BUY if direction == "BUY" else mt5.ORDER_TYPE_SELL
-
-    info = mt5.symbol_info(mt5_sym)
-    filling = mt5.ORDER_FILLING_IOC
+    filling    = mt5.ORDER_FILLING_IOC
     if info and info.filling_mode & mt5.ORDER_FILLING_FOK:
         filling = mt5.ORDER_FILLING_FOK
+    digits = info.digits if info else 2
 
     request = {
         "action":       mt5.TRADE_ACTION_DEAL,
@@ -221,8 +236,8 @@ def place_market_order(mt5_sym: str, direction: str, lot: float,
         "volume":       lot,
         "type":         order_type,
         "price":        price,
-        "sl":           round(sl, info.digits if info else 2),
-        "tp":           round(tp, info.digits if info else 2),
+        "sl":           round(sl, digits),
+        "tp":           round(tp, digits),
         "deviation":    20,
         "magic":        MAGIC_NUMBER,
         "comment":      "SCALP",
@@ -232,7 +247,7 @@ def place_market_order(mt5_sym: str, direction: str, lot: float,
 
     result = mt5.order_send(request)
     if result and result.retcode == mt5.TRADE_RETCODE_DONE:
-        log.info("✅ FILLED | %s %s | Lot=%.2f | Entry=%.2f | SL=%.2f | TP=%.2f | #%d",
+        log.info("✅ FILLED | %s %s | Lot=%.2f | Entry=%.5f | SL=%.5f | TP=%.5f | #%d",
                  direction, mt5_sym, lot, result.price, sl, tp, result.order)
         return result.order
     else:
@@ -241,7 +256,7 @@ def place_market_order(mt5_sym: str, direction: str, lot: float,
         return None
 
 
-# ── Trade Manager (Breakeven + Trail) ─────────────────────────────
+# ── Trade Manager ──────────────────────────────────────────────────
 def manage_open_trades():
     positions = mt5.positions_get()
     if not positions:
@@ -256,49 +271,44 @@ def manage_open_trades():
         if sl_dist == 0 or tp_dist == 0:
             continue
 
-        is_long   = pos.type == mt5.ORDER_TYPE_BUY
-        cur_price = pos.price_current
-        profit_dist = (cur_price - pos.price_open) if is_long else (pos.price_open - cur_price)
+        is_long     = pos.type == mt5.ORDER_TYPE_BUY
+        profit_dist = (pos.price_current - pos.price_open) if is_long else (pos.price_open - pos.price_current)
         progress    = profit_dist / tp_dist if tp_dist > 0 else 0
 
         if progress <= 0:
-            continue  # trade going wrong, don't adjust
+            continue
 
+        info   = mt5.symbol_info(pos.symbol)
+        digits = info.digits if info else 2
         new_sl = None
 
         # Breakeven
         if progress >= BREAKEVEN_PCT:
-            be_target = pos.price_open + 0.1 if is_long else pos.price_open - 0.1
-            if (is_long  and pos.sl < pos.price_open) or \
-               (not is_long and pos.sl > pos.price_open):
-                new_sl = be_target
-                log.info("🔒 BREAKEVEN | %s #%d | SL → %.2f", pos.symbol, pos.ticket, new_sl)
+            be = pos.price_open + 0.1 if is_long else pos.price_open - 0.1
+            if (is_long and pos.sl < pos.price_open) or (not is_long and pos.sl > pos.price_open):
+                new_sl = be
+                log.info("🔒 BREAKEVEN | %s #%d", pos.symbol, pos.ticket)
 
-        # Trail stop
+        # Trail
         if progress >= TRAIL_PCT:
-            trail_dist = sl_dist * TRAIL_MULT
             tick = mt5.symbol_info_tick(pos.symbol)
             if tick:
-                if is_long:
-                    candidate = tick.bid - trail_dist
-                    if candidate > pos.sl and (new_sl is None or candidate > new_sl):
-                        new_sl = candidate
-                else:
-                    candidate = tick.ask + trail_dist
-                    if candidate < pos.sl and (new_sl is None or candidate < new_sl):
-                        new_sl = candidate
-                if new_sl != be_target:
-                    log.info("📈 TRAIL SL | %s #%d | SL → %.2f", pos.symbol, pos.ticket, new_sl)
+                trail_dist = sl_dist * TRAIL_MULT
+                candidate  = (tick.bid - trail_dist) if is_long else (tick.ask + trail_dist)
+                if is_long and candidate > pos.sl and (new_sl is None or candidate > new_sl):
+                    new_sl = candidate
+                    log.info("📈 TRAIL | %s #%d | SL → %.5f", pos.symbol, pos.ticket, new_sl)
+                elif not is_long and candidate < pos.sl and (new_sl is None or candidate < new_sl):
+                    new_sl = candidate
+                    log.info("📉 TRAIL | %s #%d | SL → %.5f", pos.symbol, pos.ticket, new_sl)
 
-        if new_sl and abs(new_sl - pos.sl) > 0.01:
-            info = mt5.symbol_info(pos.symbol)
-            req  = {
+        if new_sl and abs(new_sl - pos.sl) > 0.001:
+            mt5.order_send({
                 "action":   mt5.TRADE_ACTION_SLTP,
                 "position": pos.ticket,
-                "sl":       round(new_sl, info.digits if info else 2),
+                "sl":       round(new_sl, digits),
                 "tp":       pos.tp,
-            }
-            mt5.order_send(req)
+            })
 
 
 # ── Telegram ───────────────────────────────────────────────────────
@@ -315,27 +325,30 @@ def tg(msg: str):
         pass
 
 
-# ── Main Loop ──────────────────────────────────────────────────────
+# ── Main ───────────────────────────────────────────────────────────
 def run():
     log.info("=" * 60)
-    log.info("  VISHU SCALP BOT — LIVE $50 ACCOUNT")
-    log.info("  Pairs  : ETHUSD, BTCUSD")
-    log.info("  Risk   : %.1f%% per trade | -%.1f%% daily stop", RISK_PERCENT, abs(DAILY_LOSS_LIMIT))
-    log.info("  RR     : 1 : %.1f | Max trades/day: %d", RR_RATIO, MAX_TRADES_DAY)
+    log.info("  VISHU SCALP BOT — ALL 4 PAIRS")
+    log.info("  ETH | BTC | XAU | XAG")
+    log.info("  Confirm: 1H + 15M bias must agree")
+    log.info("  Lock: %d min pause after any loss", LOCK_AFTER_LOSS_MINUTES)
     log.info("=" * 60)
 
     if not connect_mt5():
         return
 
-    balance_start = get_balance()
-    today_date    = datetime.now(timezone.utc).date()
-    trades_today  = 0
+    balance_start  = get_balance()
+    today_date     = datetime.now(timezone.utc).date()
+    trades_today   = 0
+    locked_until   = None        # datetime — bot locked after a loss
+    last_loss_seen = None        # track which loss triggered the lock
 
     tg(
-        f"🚀 SCALP BOT STARTED\n"
+        f"🚀 SCALP BOT STARTED — ALL 4 PAIRS\n"
         f"Balance: ${balance_start:.2f}\n"
         f"Risk: {RISK_PERCENT}%/trade | Daily stop: {DAILY_LOSS_LIMIT}%\n"
-        f"Max trades: {MAX_TRADES_DAY}/day | RR: 1:{RR_RATIO}"
+        f"RR: 1:{RR_RATIO} | Loss lock: {LOCK_AFTER_LOSS_MINUTES}min\n"
+        f"Confirmation: 1H + 15M bias must agree"
     )
 
     while True:
@@ -347,8 +360,9 @@ def run():
                 balance_start = get_balance()
                 today_date    = now.date()
                 trades_today  = 0
+                locked_until  = None
                 log.info("── New day | Balance=$%.2f ──", balance_start)
-                tg(f"🌅 New day\nBalance: ${balance_start:.2f}\nBot scanning...")
+                tg(f"🌅 New day | Balance: ${balance_start:.2f}")
 
             balance = get_balance()
 
@@ -356,57 +370,73 @@ def run():
             if balance_start > 0:
                 daily_pct = (balance - balance_start) / balance_start * 100
                 if daily_pct <= DAILY_LOSS_LIMIT:
-                    log.warning("🛑 Daily loss limit %.1f%% — stopped for today", daily_pct)
-                    tg(f"🛑 DAILY STOP\nDown {daily_pct:.1f}% today\nBot paused until tomorrow")
+                    log.warning("🛑 Daily loss limit %.1f%% hit — stopped for today", daily_pct)
+                    tg(f"🛑 DAILY STOP\nDown {daily_pct:.1f}% today\nPaused until tomorrow")
                     time.sleep(3600)
                     continue
 
             # ── Friday cutoff ──────────────────────────────────────
             if is_friday_cutoff():
-                log.info("Friday close — no new scalps")
+                log.info("Friday close — no new scalps (weekend gap risk)")
                 time.sleep(300)
                 continue
 
-            # ── Daily trade cap ────────────────────────────────────
-            if trades_today >= MAX_TRADES_DAY:
-                log.info("Max %d trades reached today — resting", MAX_TRADES_DAY)
+            # ── Loss lock check ────────────────────────────────────
+            # Check if last closed trade was a loss — if yes, lock
+            last_trade = get_last_closed_trade()
+            if last_trade and last_trade["profit"] < 0:
+                trade_time = last_trade["time"]
+                if last_loss_seen != trade_time:
+                    # New loss detected — start lock
+                    last_loss_seen = trade_time
+                    locked_until   = trade_time + timedelta(minutes=LOCK_AFTER_LOSS_MINUTES)
+                    loss_amt       = last_trade["profit"]
+                    log.warning("🔐 LOSS DETECTED $%.2f — locked for %d min until %s IST",
+                                loss_amt, LOCK_AFTER_LOSS_MINUTES,
+                                (locked_until + IST).strftime("%H:%M"))
+                    tg(f"🔐 LOSS LOCK\n"
+                       f"Last trade: ${loss_amt:.2f}\n"
+                       f"Pausing {LOCK_AFTER_LOSS_MINUTES}min — no new entries until "
+                       f"{(locked_until + IST).strftime('%H:%M IST')}")
+
+            if locked_until and now < locked_until:
+                mins_left = int((locked_until - now).total_seconds() / 60)
+                log.info("🔐 Loss lock active — %d min remaining", mins_left)
                 time.sleep(60)
                 continue
 
             # ── Kill zone gate ─────────────────────────────────────
             in_kz, kz_name = in_kill_zone()
             if not in_kz:
-                log.info("[%s] ⏳ No kill zone — next: %s", ist_now(), next_kill_zone_str())
+                log.info("[%s] ⏳ No kill zone — next: %s", ist_now(), next_kz_str())
                 time.sleep(60)
                 continue
 
             # ── Manage existing trades ─────────────────────────────
             manage_open_trades()
 
-            # ── Max open trades gate ───────────────────────────────
+            # ── Max 1 open trade at a time ─────────────────────────
             if open_trade_count() >= MAX_OPEN:
                 time.sleep(LOOP_INTERVAL)
                 continue
 
-            # ── Scan symbols ───────────────────────────────────────
+            # ── Scan all 4 symbols ─────────────────────────────────
             for symbol, cfg in SYMBOLS.items():
                 mt5_sym = cfg["mt5_symbol"]
 
                 if balance < cfg["min_balance"]:
-                    log.info("%s: Balance $%.2f below min $%d — skip",
-                             symbol, balance, cfg["min_balance"])
                     continue
 
                 if has_position(mt5_sym):
                     continue
 
-                # 15M bias
-                bias = get_bias_15m(mt5_sym)
+                # Dual timeframe confirmation — 1H + 15M must agree
+                bias = get_confirmed_bias(mt5_sym)
                 if not bias:
-                    log.info("%s: No clear 15M bias — skip", symbol)
+                    log.info("%s: 1H/15M disagree — skip (low confidence)", symbol)
                     continue
 
-                # 1M signal
+                # 1M entry signal
                 direction, sl, tp = get_1m_entry(mt5_sym, bias)
                 if not direction:
                     continue
@@ -416,45 +446,41 @@ def run():
                 if not tick:
                     continue
                 entry_price = tick.ask if direction == "BUY" else tick.bid
-                sl_pts = abs(entry_price - sl)
+                sl_pts      = abs(entry_price - sl)
                 if sl_pts <= 0:
                     continue
 
                 lot = calc_lot(balance, sl_pts, cfg)
 
-                log.info("[%s] 🎯 SIGNAL | %s %s | Bias=%s | KZ=%s | Lot=%.2f | SL_dist=%.2f",
-                         ist_now(), direction, symbol, bias, kz_name, lot, sl_pts)
+                log.info("[%s] 🎯 %s %s | Bias 1H+15M=%s | KZ=%s | Lot=%.2f",
+                         ist_now(), direction, symbol, bias, kz_name, lot)
 
-                # Place order
-                ticket = place_market_order(mt5_sym, direction, lot, sl, tp)
+                ticket = place_order(mt5_sym, direction, lot, sl, tp)
                 if ticket:
                     trades_today += 1
-                    risk_usd = sl_pts * lot * cfg["contract_size"]
-                    reward_usd = risk_usd * RR_RATIO
+                    risk_usd    = sl_pts * lot * cfg["contract_size"]
+                    reward_usd  = risk_usd * RR_RATIO
                     tg(
-                        f"⚡ SCALP #{trades_today}\n"
-                        f"{direction} {symbol}\n"
+                        f"⚡ SCALP #{trades_today} — {direction} {symbol}\n"
                         f"Lot: {lot} | KZ: {kz_name}\n"
-                        f"Risk: ${risk_usd:.2f} → Reward: ${reward_usd:.2f}\n"
+                        f"Bias: 1H+15M both {bias}\n"
+                        f"Risk: ${risk_usd:.2f} → Target: ${reward_usd:.2f}\n"
                         f"Balance: ${balance:.2f}"
                     )
-                    time.sleep(10)  # pause briefly after entry
+                    time.sleep(10)
+                    break  # only 1 trade at a time — break after placing
 
             time.sleep(LOOP_INTERVAL)
 
         except KeyboardInterrupt:
-            log.info("Bot stopped by user")
             balance = get_balance()
             pnl     = balance - balance_start
             pct     = (pnl / balance_start * 100) if balance_start > 0 else 0
-            summary = (
-                f"⏹ SCALP BOT STOPPED\n"
-                f"Final: ${balance:.2f}\n"
-                f"P&L: ${pnl:+.2f} ({pct:+.1f}%)\n"
-                f"Trades today: {trades_today}"
-            )
-            log.info(summary)
-            tg(summary)
+            msg     = (f"⏹ SCALP BOT STOPPED\n"
+                       f"Final: ${balance:.2f} | P&L: ${pnl:+.2f} ({pct:+.1f}%)\n"
+                       f"Trades: {trades_today}")
+            log.info(msg)
+            tg(msg)
             break
         except Exception as e:
             log.error("Loop error: %s", e, exc_info=True)
