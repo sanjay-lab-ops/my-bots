@@ -8,6 +8,8 @@
 !VISHU_ELITE_BOT/**
 !VISHU_SMC_BOT/
 !VISHU_SMC_BOT/**
+!VISHU_SCALP_BOT/
+!VISHU_SCALP_BOT/**
 !cross_bot_lock.py
 !START_3_BOTS.bat
 !README.md
