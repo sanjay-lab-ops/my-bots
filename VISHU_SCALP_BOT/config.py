@@ -72,8 +72,8 @@ ATR_SL_MULT     = 0.4    # super tight SL = 0.4 × ATR
 EMA_FAST        = 3       # faster EMA cross signals
 EMA_SLOW        = 8       # faster EMA slow
 RSI_PERIOD      = 7       # faster RSI
-RSI_BUY_MAX     = 70      # wider RSI range for more signals
-RSI_SELL_MIN    = 30
+RSI_BUY_MAX     = 90      # almost no RSI block on buys
+RSI_SELL_MIN    = 10      # almost no RSI block on sells
 
 # ── Time Exit — close trade after N minutes if TP/SL not hit ──────
 # Prevents trades sitting open for hours eating spread
