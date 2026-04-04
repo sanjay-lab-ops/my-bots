@@ -32,6 +32,11 @@ def _now_utc_minutes() -> int:
 
 def is_session_active(symbol: str) -> bool:
     """Return True if the current UTC time falls within ANY session window for symbol."""
+    # XAU and XAG are closed on weekends
+    if symbol in ("XAUUSD", "XAGUSD"):
+        weekday = datetime.now(timezone.utc).weekday()  # 5=Sat, 6=Sun
+        if weekday >= 5:
+            return False
     total_m = _now_utc_minutes()
     for sess in SESSIONS.get(symbol, []):
         sh, sm = sess["start_utc"]

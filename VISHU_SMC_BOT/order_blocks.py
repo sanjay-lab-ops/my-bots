@@ -1,11 +1,11 @@
 """
-Order Block Detection — Smart Money Concepts
+Order Block Detection -- Smart Money Concepts
 
-What is an Order Block?
-  Institutions cannot buy/sell millions of dollars in one candle — they spread
+What is an Order Block
+  Institutions cannot buy/sell millions of dollars in one candle -- they spread
   their orders over time. The LAST candle opposing the direction before a strong
   move is where institutions placed their orders. When price returns to this
-  zone, institutions add more → price bounces strongly.
+  zone, institutions add more -> price bounces strongly.
 
   Bullish OB: Last RED candle before a big UP move (institutions bought here)
   Bearish OB: Last GREEN candle before a big DOWN move (institutions sold here)
@@ -35,7 +35,7 @@ def find_order_blocks(df: pd.DataFrame, trend: str) -> list:
         mid      : midpoint (entry price for limit order)
         time     : timestamp of OB candle
         fresh    : True if price hasn't returned to OB yet
-        strength : 1–3 (how big the move was after OB)
+        strength : 1-3 (how big the move was after OB)
         atr_at_ob: ATR value when OB formed
     """
     if df is None or len(df) < 20:
@@ -55,12 +55,12 @@ def find_order_blocks(df: pd.DataFrame, trend: str) -> list:
         is_bull_candle = candle["close"] > candle["open"]
         is_bear_candle = candle["close"] < candle["open"]
 
-        # ── Bullish OB: last bearish candle before significant upward move ──
+        # -- Bullish OB: last bearish candle before significant upward move --
         if trend == "bullish" and is_bear_candle:
             # Measure the move in the 3 candles after this one
             move_high  = df["high"].iloc[i+1:i+4].max()
             move_after = move_high - candle["high"]
-            if move_after >= atr_v * 1.0:   # at least 1× ATR move up after OB
+            if move_after >= atr_v * 1.0:   # at least 1x ATR move up after OB
                 strength = 3 if move_after >= atr_v * 3 else (2 if move_after >= atr_v * 2 else 1)
                 ob_top   = candle["high"]
                 ob_bot   = candle["low"]
@@ -76,7 +76,7 @@ def find_order_blocks(df: pd.DataFrame, trend: str) -> list:
                     "atr_at_ob": atr_v,
                 })
 
-        # ── Bearish OB: last bullish candle before significant downward move ──
+        # -- Bearish OB: last bullish candle before significant downward move --
         elif trend == "bearish" and is_bull_candle:
             move_low   = df["low"].iloc[i+1:i+4].min()
             move_after = candle["low"] - move_low

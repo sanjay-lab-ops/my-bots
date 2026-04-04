@@ -1,13 +1,13 @@
 """
-Trade Executor — Institutional style order placement.
+Trade Executor -- Institutional style order placement.
 
 Key difference from retail:
-  RETAIL  → places MARKET ORDER chasing current price
-  THIS BOT → places LIMIT ORDER at Order Block, waits for price to come to us
+  RETAIL  -> places MARKET ORDER chasing current price
+  THIS BOT -> places LIMIT ORDER at Order Block, waits for price to come to us
 
 When price returns to our order block and fills our limit order,
 we're entering at the same price the institution originally placed their orders.
-This gives us the same entry as BlackRock — not chasing them.
+This gives us the same entry as BlackRock -- not chasing them.
 """
 
 import logging
@@ -32,7 +32,7 @@ def place_limit_order(symbol: str, direction: str, lot: float,
                       comment: str = "SMC-OB") -> int | None:
     """
     Place a PENDING LIMIT ORDER at the order block level.
-    Bot waits for price to return — institutional execution style.
+    Bot waits for price to return -- institutional execution style.
 
     Returns order ticket (int) or None if failed.
     """
@@ -67,7 +67,7 @@ def place_limit_order(symbol: str, direction: str, lot: float,
         retcode = result.retcode if result else "N/A"
         err     = result.comment if result else mt5.last_error()
         logger.error("Limit order failed | %s | retcode=%s | %s", mt5_sym, retcode, err)
-        print(f"      → retcode={retcode} | {err}")
+        print(f"      -> retcode={retcode} | {err}")
         return None
 
 

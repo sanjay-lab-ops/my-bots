@@ -93,7 +93,7 @@ EMA_SLOW    = 20
 # ── Risk Parameters ───────────────────────────────────────────────
 ATR_SL_MULT      = 1.5    # SL = ATR × 1.5
 RR_RATIO         = 2.0    # TP = SL × 2.0  (2:1 R:R)
-DAILY_LOSS_LIMIT = -6.0      # Stop trading today if down 6% (3 losses at 2% each)
+DAILY_LOSS_LIMIT = -15.0     # Stop trading today if down 15%
 MAX_TRADES_DAY   = 4      # total across both pairs per day
 MAX_TRADES_PAIR  = 2      # per pair per day
 
@@ -126,9 +126,9 @@ LOG_FILE = "elite_bot.log"
 
 # ── Minimum balance required to trade each symbol ────────────────
 MIN_BALANCE_TO_TRADE = {
-    "ETHUSD": 50,    # safe from $50
-    "BTCUSD": 50,    # safe from $50
-    "XAUUSD": 50,    # Hard risk cap enforced in risk.py — blocks trade if min lot > 50% balance
+    "ETHUSD": 18,    # safe from $18
+    "BTCUSD": 18,    # safe from $18
+    "XAUUSD": 18,    # Hard risk cap enforced in risk.py — blocks trade if min lot > 50% balance
     "XAGUSD": 200,   # Silver blocked until $200 balance
 }
 

@@ -166,12 +166,9 @@ def get_day_pnl() -> float:
     if not deals:
         return 0.0
 
-    # Also include unrealized P&L from open positions
-    open_pnl = sum(p.profit for p in get_open_positions())
-
-    # Sum realized P&L from closed deals (entry deals have in/out flag)
+    # Only count realized P&L from closed bot trades (exclude floating/manual)
     realized = sum(
         d.profit for d in deals
         if d.magic == MAGIC_NUMBER and d.entry == mt5.DEAL_ENTRY_OUT
     )
-    return realized + open_pnl
+    return realized

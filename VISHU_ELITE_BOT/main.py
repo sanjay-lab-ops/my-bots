@@ -213,12 +213,13 @@ def bot_tick():
 
     # ── 1. Daily loss limit check ─────────────────────────────────
     day_pnl_cache = get_day_pnl()
-    if is_daily_loss_limit_hit(day_pnl_cache):
+    if is_daily_loss_limit_hit(day_pnl_cache, get_balance()):
         if not loss_limit_notified:
             tg.notify_daily_loss_limit(day_pnl_cache, get_balance())
             loss_limit_notified = True
-        logger.warning("Daily loss limit reached — DEMO MODE: continuing anyway")
-        # Demo mode: log warning but do NOT stop trading
+        logger.warning("🛑 Daily loss limit reached — halting trading for today")
+        import time as _time; _time.sleep(3600)
+        return
 
     # ── 1b. Capital protection + floating profit monitor ─────────────
     try:
@@ -400,10 +401,10 @@ def bot_tick():
             continue
 
         # ── 4c. Cross-bot: skip if ANY bot has a position on this symbol ──
-        open_pos = get_open_positions(mt5_sym)   # all magics
+        open_pos = get_bot_positions(mt5_sym)   # bot trades only, ignore manual trades
         if open_pos:
             logger.info(
-                "[%s] Skip — position already open (any bot, ticket=%d)",
+                "[%s] Skip — bot position already open (ticket=%d)",
                 symbol, open_pos[0].ticket,
             )
             continue
@@ -615,7 +616,7 @@ def send_daily_summary_if_needed():
 
 def run():
     """Main entry point — connect MT5 and start the bot loop."""
-    global _last_reset_day, session_traded
+    global _last_reset_day, session_traded, daily_summary_sent
     _last_reset_day = datetime.now(timezone.utc).date()
     session_traded  = _load_session_traded()   # restore from disk on restart
 

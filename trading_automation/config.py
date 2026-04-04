@@ -112,7 +112,7 @@ RISK_PERCENT      = RISK_PERCENT_MAP[RISK_MODE]
 ATR_SL_MULTIPLIER = 1.5   # SL = 1.5 × ATR
 RR_RATIO          = 2.0   # TP = SL × 2 (2:1 R:R) — let price run, trailing stop protects
 MAX_TRADES_PER_DAY = 4    # max 4 trades total across both pairs per day
-DAILY_LOSS_LIMIT  = -6.0     # Stop trading today if down 6% (3 losses at 2% each)
+DAILY_LOSS_LIMIT  = -15.0    # Stop trading today if down 15%
 
 # ── Minimum balance required to trade each symbol ────────────────
 # Protects live accounts from oversized risk on small balances.
@@ -123,9 +123,9 @@ DAILY_LOSS_LIMIT  = -6.0     # Stop trading today if down 6% (3 losses at 2% eac
 #   "XAUUSD": 200,   "XAGUSD": 150,
 #
 MIN_BALANCE_TO_TRADE = {
-    "ETHUSD": 50,    # safe from $50
-    "BTCUSD": 50,    # safe from $50
-    "XAUUSD": 50,    # Hard risk cap enforced in risk_engine.py — blocks trade if min lot > 50% balance
+    "ETHUSD": 18,    # safe from $18
+    "BTCUSD": 18,    # safe from $18
+    "XAUUSD": 18,    # Hard risk cap enforced in risk_engine.py — blocks trade if min lot > 50% balance
     "XAGUSD": 200,   # Silver blocked until $200 balance
 }
 

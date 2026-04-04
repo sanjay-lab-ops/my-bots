@@ -1,5 +1,5 @@
 """
-VISHU SMC BOT — Single Day Backtest
+VISHU SMC BOT -- Single Day Backtest
 
 Change BACKTEST_DATE to test any day.
 Shows: OB detected, limit order level, whether TP/SL was hit, P&L.
@@ -20,17 +20,17 @@ from fvg import find_fvgs, find_nearest_fvg
 from liquidity import find_liquidity_pools, find_tp_target
 from compounding import calculate_lot
 
-# ── Change this to backtest any date ──────────────────────────────
+# -- Change this to backtest any date ------------------------------
 BACKTEST_DATE    = date(2026, 3, 18)   # YYYY, M, D
 STARTING_BALANCE = 20.0
-# ─────────────────────────────────────────────────────────────────
+# -----------------------------------------------------------------
 
 
 def run_backtest():
-    print(f"\n{'═'*64}")
-    print(f"  VISHU SMC BOT — BACKTEST: {BACKTEST_DATE}")
+    print(f"\n{'='*64}")
+    print(f"  VISHU SMC BOT -- BACKTEST: {BACKTEST_DATE}")
     print(f"  Starting balance: ${STARTING_BALANCE:.2f}")
-    print(f"{'═'*64}")
+    print(f"{'='*64}")
 
     if not connect():
         print("  Cannot connect to MT5.")
@@ -55,13 +55,13 @@ def run_backtest():
 
         atr_val = calc_atr(df_h4, ATR_PERIOD).iloc[-1]
         if atr_val < cfg["atr_min"]:
-            print(f"    ATR {atr_val:.2f} < min {cfg['atr_min']} — skip")
+            print(f"    ATR {atr_val:.2f} < min {cfg['atr_min']} -- skip")
             continue
 
         structure = analyze_structure(df_h4)
         trend     = structure["trend"]
         if trend == "ranging":
-            print(f"    Ranging market — no trade")
+            print(f"    Ranging market -- no trade")
             continue
 
         direction = "buy" if trend == "bullish" else "sell"
@@ -87,7 +87,7 @@ def run_backtest():
             ob_bottom    = fvg["bottom"]
             entry_reason = "FVG"
         else:
-            print(f"    No OB or FVG near price — no trade")
+            print(f"    No OB or FVG near price -- no trade")
             continue
 
         if direction == "buy":
@@ -98,7 +98,7 @@ def run_backtest():
             sl_dist = sl - entry_price
 
         if sl_dist <= 0:
-            print(f"    Invalid SL — skip")
+            print(f"    Invalid SL -- skip")
             continue
 
         liq = find_liquidity_pools(df_h4)
@@ -119,7 +119,7 @@ def run_backtest():
         result = "open"
         pnl    = 0.0
         exit_p = entry_price
-        exit_t = "—"
+        exit_t = "--"
 
         if df_1m is not None and not df_1m.empty:
             day_1m  = df_1m[df_1m.index.date == BACKTEST_DATE]
@@ -134,7 +134,7 @@ def run_backtest():
                         touched = True
                     continue
 
-                # In trade — check SL/TP
+                # In trade -- check SL/TP
                 if direction == "buy":
                     if row["low"] <= sl:
                         pnl    = (sl - entry_price) * lot * cfg["contract_size"]
@@ -173,7 +173,7 @@ def run_backtest():
                 exit_t = "EOD"
             elif not touched:
                 result = "NO FILL"
-                print(f"    Price never returned to OB — no fill on {BACKTEST_DATE}")
+                print(f"    Price never returned to OB -- no fill on {BACKTEST_DATE}")
 
         balance += pnl
         trade = {
@@ -197,12 +197,12 @@ def run_backtest():
         print("\n  No trades found.")
         return
 
-    sep = "═" * 64
+    sep = "=" * 64
     print(f"\n{sep}")
-    print(f"  RESULTS — {BACKTEST_DATE}")
+    print(f"  RESULTS -- {BACKTEST_DATE}")
     print(sep)
     for t in all_trades:
-        emoji = "✅" if t["Result"] == "WIN" else ("❌" if t["Result"] == "LOSS" else "⏸")
+        emoji = "" if t["Result"] == "WIN" else ("" if t["Result"] == "LOSS" else "")
         sign  = "+" if t["P&L"] >= 0 else ""
         print(f"  {emoji} {t['Pair']:8} {t['Action']:5} | "
               f"Limit@{t['Limit@']:.2f} SL={t['SL']:.2f} TP={t['TP']:.2f} | "
@@ -212,7 +212,7 @@ def run_backtest():
     total_pnl = sum(t["P&L"] for t in all_trades)
     wins      = sum(1 for t in all_trades if t["Result"] == "WIN")
     losses    = sum(1 for t in all_trades if t["Result"] == "LOSS")
-    print(f"\n  {'─'*50}")
+    print(f"\n  {'-'*50}")
     sign = "+" if total_pnl >= 0 else ""
     print(f"  Total P&L  : {sign}${total_pnl:.2f}")
     print(f"  Wins/Losses: {wins}/{losses}")

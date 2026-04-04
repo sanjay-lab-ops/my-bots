@@ -1,16 +1,16 @@
 """
-Fair Value Gap (FVG) Detection — Smart Money Concepts
+Fair Value Gap (FVG) Detection -- Smart Money Concepts
 
-What is an FVG?
+What is an FVG
   When price moves very fast, it creates a gap (imbalance) between 3 candles:
-    Candle[i-2] high < Candle[i] low  → Bullish FVG (price gapped UP, demand below)
-    Candle[i-2] low  > Candle[i] high → Bearish FVG (price gapped DOWN, supply above)
+    Candle[i-2] high < Candle[i] low  -> Bullish FVG (price gapped UP, demand below)
+    Candle[i-2] low  > Candle[i] high -> Bearish FVG (price gapped DOWN, supply above)
 
   Institutions will often send price back into these gaps to:
     1. Fill their own unfilled orders from the fast move
     2. Trap retail traders who chased the breakout
 
-  We enter at the FVG midpoint when price returns to it — same as OB logic.
+  We enter at the FVG midpoint when price returns to it -- same as OB logic.
 """
 
 import pandas as pd
@@ -47,7 +47,7 @@ def find_fvgs(df: pd.DataFrame) -> list:
 
         gap_min = atr_v * FVG_MIN_RATIO
 
-        # ── Bullish FVG: gap between c0.high and c2.low ──
+        # -- Bullish FVG: gap between c0.high and c2.low --
         if c2["low"] > c0["high"]:
             gap_size = c2["low"] - c0["high"]
             if gap_size >= gap_min:
@@ -65,7 +65,7 @@ def find_fvgs(df: pd.DataFrame) -> list:
                     "gap_size": gap_size,
                 })
 
-        # ── Bearish FVG: gap between c0.low and c2.high ──
+        # -- Bearish FVG: gap between c0.low and c2.high --
         elif c2["high"] < c0["low"]:
             gap_size = c0["low"] - c2["high"]
             if gap_size >= gap_min:

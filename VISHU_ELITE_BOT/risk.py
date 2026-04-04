@@ -106,15 +106,19 @@ def calculate_sl_tp(
     return sl, tp
 
 
-def is_daily_loss_limit_hit(day_pnl: float) -> bool:
+def is_daily_loss_limit_hit(day_pnl: float, balance: float = 0.0) -> bool:
     """
     Check if daily P&L has breached the loss limit.
+    Uses % of current balance so profits made earlier in day are protected.
     Returns True if trading should be halted for the day.
     """
-    if day_pnl <= DAILY_LOSS_LIMIT:
+    if balance <= 0:
+        return False
+    limit_dollars = balance * (abs(DAILY_LOSS_LIMIT) / 100)
+    if day_pnl <= -limit_dollars:
         logger.warning(
-            "DAILY LOSS LIMIT HIT: P&L=%.2f <= limit=%.2f — halting all trading",
-            day_pnl, DAILY_LOSS_LIMIT,
+            "🛑 DAILY LOSS LIMIT HIT: P&L=$%.2f <= -$%.2f (%.0f%% of $%.2f) — halting",
+            day_pnl, limit_dollars, abs(DAILY_LOSS_LIMIT), balance,
         )
         return True
     return False

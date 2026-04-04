@@ -1,5 +1,5 @@
 """
-Manual Trade Alert — send your manual trade to Telegram instantly.
+Manual Trade Alert -- send your manual trade to Telegram instantly.
 
 Usage:
   python manual_alert.py
@@ -34,9 +34,9 @@ def ist_now():
 
 
 def main():
-    print("\n══════════════════════════════════")
+    print("\n==================================")
     print("  MANUAL TRADE ALERT")
-    print("══════════════════════════════════")
+    print("==================================")
 
     pair      = input("  Pair   (BTC/XAU/XAG/ETH)  : ").strip().upper()
     direction = input("  Direction (BUY/SELL)        : ").strip().upper()
@@ -46,11 +46,11 @@ def main():
     lots      = input("  Lot size                    : ").strip()
     reason    = input("  Reason (optional)           : ").strip()
 
-    emoji = "🟢" if direction == "BUY" else "🔴"
+    emoji = "" if direction == "BUY" else ""
     time  = ist_now()
 
     msg = (
-        f"👤 <b>[MANUAL TRADE]</b>\n"
+        f" <b>[MANUAL TRADE]</b>\n"
         f"{emoji} <b>{direction} {pair}</b>\n"
         f"Entry  : {entry}\n"
         f"SL     : {sl}\n"
@@ -62,8 +62,8 @@ def main():
         msg += f"\nReason : {reason}"
 
     send(msg)
-    print(f"\n  ✅ Alert sent to Telegram at {time}")
-    print("══════════════════════════════════\n")
+    print(f"\n   Alert sent to Telegram at {time}")
+    print("==================================\n")
 
 
 if __name__ == "__main__":

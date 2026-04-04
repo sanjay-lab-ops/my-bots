@@ -77,6 +77,7 @@ def get_candles(symbol: str, tf: int, count: int) -> pd.DataFrame | None:
     df["ema_slow"] = df["close"].ewm(span=EMA_SLOW, adjust=False).mean()
     df["rsi"]      = calc_rsi(df["close"], RSI_PERIOD)
     df["atr"]      = calc_atr(df, ATR_PERIOD)
+    df["sma25"]    = df["close"].rolling(25).mean()
     return df
 
 
@@ -142,6 +143,7 @@ def get_1m_entry(mt5_sym: str, bias: str) -> tuple:
     """
     Entry when 1M EMAs aligned in bias direction AND price moving with it.
     No waiting for a fresh cross — enters on momentum confirmation.
+    SL uses 15M ATR for proper breathing room (1M ATR too small, gets swept).
     """
     df = get_candles(mt5_sym, mt5.TIMEFRAME_M1, 40)
     if df is None:
@@ -154,7 +156,12 @@ def get_1m_entry(mt5_sym: str, bias: str) -> tuple:
         return None, None, None
 
     price = tick.ask if bias == "BUY" else tick.bid
-    atr   = last["atr"]
+
+    # Use 15M ATR for SL — wider and more stable than 1M ATR
+    # 35 candles to ensure SMA25 is valid (Kotegawa mean reversion)
+    df15m = get_candles(mt5_sym, mt5.TIMEFRAME_M15, 35)
+    atr   = df15m.iloc[-1]["atr"] if df15m is not None else last["atr"]
+    sma25 = df15m.iloc[-1]["sma25"] if (df15m is not None and "sma25" in df15m.columns and not df15m.iloc[-1]["sma25"] != df15m.iloc[-1]["sma25"]) else None
     rsi   = last["rsi"]
 
     ema_aligned_buy  = last["ema_fast"] > last["ema_slow"]
@@ -165,17 +172,33 @@ def get_1m_entry(mt5_sym: str, bias: str) -> tuple:
     momentum_down = last["close"] < prev["close"]
 
     # BUY: RSI in oversold zone (20–45) — price has room to bounce UP
+    # Kotegawa filter: only buy when price is BELOW 15M SMA25 (mean reversion dip)
     if (bias == "BUY" and ema_aligned_buy and momentum_up
             and RSI_BUY_MIN < rsi < RSI_BUY_MAX):
+        if sma25 is not None and price >= sma25:
+            return None, None, None   # price at/above mean — wait for pullback
         sl = price - atr * ATR_SL_MULT
         tp = price + atr * ATR_SL_MULT * RR_RATIO
+        # Mean reversion TP: aim for SMA25 if it gives ≥1.5× reward
+        if sma25 is not None and sma25 > price:
+            risk = price - sl
+            if (sma25 - price) >= risk * 1.5:
+                tp = sma25
         return "BUY", sl, tp
 
     # SELL: RSI in overbought zone (55–80) — price has room to fall DOWN
+    # Kotegawa filter: only sell when price is ABOVE 15M SMA25 (mean reversion spike)
     if (bias == "SELL" and ema_aligned_sell and momentum_down
             and RSI_SELL_MIN < rsi < RSI_SELL_MAX):
+        if sma25 is not None and price <= sma25:
+            return None, None, None   # price at/below mean — wait for rally
         sl = price + atr * ATR_SL_MULT
         tp = price - atr * ATR_SL_MULT * RR_RATIO
+        # Mean reversion TP: aim for SMA25 if it gives ≥1.5× reward
+        if sma25 is not None and sma25 < price:
+            risk = sl - price
+            if (price - sma25) >= risk * 1.5:
+                tp = sma25
         return "SELL", sl, tp
 
     return None, None, None
@@ -366,9 +389,10 @@ def run():
     if not connect_mt5():
         return
 
-    balance_start = get_balance()
-    today_date    = datetime.now(timezone.utc).date()
-    trades_today  = 0
+    balance_start    = get_balance()
+    day_peak_balance = balance_start
+    today_date       = datetime.now(timezone.utc).date()
+    trades_today     = 0
 
     tg(
         f"🚀 SCALP BOT STARTED — ALL 4 PAIRS\n"
@@ -383,22 +407,25 @@ def run():
 
             # ── Daily reset ────────────────────────────────────────
             if now.date() != today_date:
-                balance_start = get_balance()
-                today_date    = now.date()
-                trades_today  = 0
+                balance_start    = get_balance()
+                day_peak_balance = balance_start
+                today_date       = now.date()
+                trades_today     = 0
                 log.info("── New day | Balance=$%.2f ──", balance_start)
                 tg(f"🌅 New day | Balance: ${balance_start:.2f}")
 
             balance = get_balance()
 
-            # ── Daily loss guard ───────────────────────────────────
-            if balance_start > 0:
-                daily_pct = (balance - balance_start) / balance_start * 100
-                if daily_pct <= DAILY_LOSS_LIMIT:
-                    log.warning("🛑 Daily loss limit %.1f%% hit — stopped for today", daily_pct)
-                    tg(f"🛑 DAILY STOP\nDown {daily_pct:.1f}% today\nPaused until tomorrow")
-                    time.sleep(3600)
-                    continue
+            # ── Daily loss guard — uses realized balance only ──
+            if balance > day_peak_balance:
+                day_peak_balance = balance
+            loss_from_peak = balance - day_peak_balance
+            loss_pct = (loss_from_peak / day_peak_balance * 100) if day_peak_balance > 0 else 0
+            if loss_pct <= DAILY_LOSS_LIMIT:
+                log.warning("🛑 Daily loss limit %.1f%% hit — stopped for today", loss_pct)
+                tg(f"🛑 DAILY STOP\nDown {loss_pct:.1f}% from peak today\nPaused until tomorrow")
+                time.sleep(3600)
+                continue
 
             # ── Kill zone label (for logging only — no blocking) ───────
             in_kz, kz_name = in_kill_zone()
@@ -421,18 +448,31 @@ def run():
             for symbol, cfg in SYMBOLS.items():
                 mt5_sym = cfg["mt5_symbol"]
 
+                # Weekend block for XAU and XAG
+                if mt5_sym in ("XAUUSDm", "XAUUSD", "XAGUSDm", "XAGUSD"):
+                    if datetime.now(timezone.utc).weekday() >= 5:
+                        log.info("  %s: Market closed on weekends — skip", symbol)
+                        continue
+
                 # Balance check
                 if balance < cfg["min_balance"]:
                     log.info("  %s: balance $%.2f below min — skip", symbol, balance)
                     continue
 
-                # Already in trade
+                # Already in trade (this bot)
                 if has_position(mt5_sym):
                     pos = mt5.positions_get(symbol=mt5_sym)
                     if pos:
                         p = pos[0]
                         log.info("  %s: OPEN trade #%d | P&L: $%.2f | Price: %.5f",
                                  symbol, p.ticket, p.profit, p.price_current)
+                    continue
+
+                # Block if ANY bot has a position open on this symbol
+                _ALL_BOT_MAGICS = {20260327, 20260318, 20260101, 20250101, 20260319, 20260320}
+                _any_pos = mt5.positions_get(symbol=mt5_sym) or []
+                if any(p.magic in _ALL_BOT_MAGICS for p in _any_pos):
+                    log.info("  %s: BLOCKED — another bot already has position open", symbol)
                     continue
 
                 # Get raw bias per timeframe
@@ -478,6 +518,12 @@ def run():
 
                 bias = bias_1h
                 log.info("    ✅ BIAS CONFIRMED — both 1H+15M = %s", bias)
+
+                # ATR minimum filter — skip if market too flat (spread will eat profit)
+                _atr_min = cfg.get("min_atr", 0)
+                if _atr_min and atr_val < _atr_min:
+                    log.info("    ❌ SKIP — ATR %.5f below min %.5f (market too flat)", atr_val, _atr_min)
+                    continue
 
                 # 1M entry signal
                 direction, sl, tp = get_1m_entry(mt5_sym, bias)

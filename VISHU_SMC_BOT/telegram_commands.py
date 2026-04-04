@@ -1,16 +1,16 @@
 """
-Telegram Command Listener — Bot 3 SMC
+Telegram Command Listener -- Bot 3 SMC
 Runs in a background thread, polls for incoming Telegram commands.
 
 Commands:
-  /setbias SYMBOL DIRECTION  → override bot direction for a symbol
+  /setbias SYMBOL DIRECTION  -> override bot direction for a symbol
       Examples: /setbias BTCUSD buy
                 /setbias XAUUSD sell
                 /setbias ETHUSD auto   (removes override, bot decides)
-  /bias                      → show current forced biases
-  /clearbias                 → reset all overrides to auto
+  /bias                      -> show current forced biases
+  /clearbias                 -> reset all overrides to auto
 
-FORCED_BIAS is stored in forced_bias.json — main loop reads it each scan.
+FORCED_BIAS is stored in forced_bias.json -- main loop reads it each scan.
 No restart needed. Takes effect within 60 seconds.
 """
 
@@ -43,7 +43,7 @@ def _set_paused(val: bool):
 _VALID_SYMBOLS    = {"BTCUSD", "ETHUSD", "XAUUSD", "XAGUSD"}
 _VALID_DIRECTIONS = {"buy", "sell", "auto"}
 
-BOT_LABEL = "🏦 <b>[BOT 3 — SMC]</b>"
+BOT_LABEL = " <b>[BOT 3 -- SMC]</b>"
 
 
 def _send(msg: str):
@@ -85,21 +85,21 @@ def _mt5_status() -> str:
         import MetaTrader5 as mt5
         info = mt5.account_info()
         positions = mt5.positions_get() or []
-        lines = [f"💰 <b>Balance:</b> ${info.balance:.2f} | Equity: ${info.equity:.2f}"]
+        lines = [f" <b>Balance:</b> ${info.balance:.2f} | Equity: ${info.equity:.2f}"]
         if positions:
-            lines.append(f"\n📂 <b>Open Positions ({len(positions)}):</b>")
+            lines.append(f"\n <b>Open Positions ({len(positions)}):</b>")
             for p in positions:
                 direction = "BUY" if p.type == 0 else "SELL"
-                icon = "🟢" if p.profit >= 0 else "🔴"
+                icon = "" if p.profit >= 0 else ""
                 lines.append(f"{icon} {p.symbol} {direction} @ {p.price_open:.2f} | P&L: ${p.profit:.2f} | Ticket: {p.ticket}")
         else:
-            lines.append("\n📂 No open positions")
+            lines.append("\n No open positions")
         orders = mt5.orders_get() or []
         if orders:
-            lines.append(f"\n⏳ <b>Pending Orders ({len(orders)}):</b>")
+            lines.append(f"\n <b>Pending Orders ({len(orders)}):</b>")
             for o in orders:
                 otype = "BUY LMT" if o.type == 2 else "SELL LMT"
-                lines.append(f"⏳ {o.symbol} {otype} @ {o.price_open:.2f} | Ticket: {o.ticket}")
+                lines.append(f" {o.symbol} {otype} @ {o.price_open:.2f} | Ticket: {o.ticket}")
         return "\n".join(lines)
     except Exception as e:
         return f"MT5 error: {e}"
@@ -137,9 +137,9 @@ def _handle_command(text: str):
             }
             result = mt5.order_send(req)
             if result and result.retcode == mt5.TRADE_RETCODE_DONE:
-                _send(f"✅ Ticket {ticket} closed.")
+                _send(f" Ticket {ticket} closed.")
             else:
-                _send(f"❌ Close failed: {result.comment if result else 'unknown'}")
+                _send(f" Close failed: {result.comment if result else 'unknown'}")
         except Exception as e:
             _send(f"Error: {e}")
         return
@@ -159,59 +159,59 @@ def _handle_command(text: str):
         bias = load_forced_bias()
         bias[symbol] = direction
         _save_forced_bias(bias)
-        icon = "🟢" if direction == "buy" else "🔴" if direction == "sell" else "⚪"
+        icon = "" if direction == "buy" else "" if direction == "sell" else ""
         _send(f"{icon} <b>Forced bias set</b>\n{symbol}: <b>{direction.upper()}</b>\nTakes effect within 60s.")
-        logger.info("FORCED_BIAS updated: %s → %s", symbol, direction)
+        logger.info("FORCED_BIAS updated: %s -> %s", symbol, direction)
 
     elif cmd == "/bias":
         bias = load_forced_bias()
         lines = []
         for sym in ["BTCUSD", "ETHUSD", "XAUUSD", "XAGUSD"]:
             d = bias.get(sym, "auto")
-            icon = "🟢" if d == "buy" else "🔴" if d == "sell" else "⚪"
+            icon = "" if d == "buy" else "" if d == "sell" else ""
             lines.append(f"{icon} {sym}: <b>{d.upper()}</b>")
-        _send("📊 <b>Current Forced Biases</b>\n" + "\n".join(lines))
+        _send(" <b>Current Forced Biases</b>\n" + "\n".join(lines))
 
     elif cmd == "/clearbias":
         bias = {s: "auto" for s in _VALID_SYMBOLS}
         _save_forced_bias(bias)
-        _send("⚪ All forced biases cleared — bot using auto analysis.")
-        logger.info("FORCED_BIAS cleared — all auto")
+        _send(" All forced biases cleared -- bot using auto analysis.")
+        logger.info("FORCED_BIAS cleared -- all auto")
 
     elif cmd == "/pause":
         _set_paused(True)
-        _send("⏸ <b>Bot PAUSED</b> — no new trades will open.\nOpen positions still managed.\nSend /resume to restart.")
+        _send(" <b>Bot PAUSED</b> -- no new trades will open.\nOpen positions still managed.\nSend /resume to restart.")
         logger.info("Bot paused via Telegram.")
 
     elif cmd == "/resume":
         _set_paused(False)
-        _send("▶️ <b>Bot RESUMED</b> — scanning for new trades again.")
+        _send(" <b>Bot RESUMED</b> -- scanning for new trades again.")
         logger.info("Bot resumed via Telegram.")
 
     elif cmd == "/help":
         _send(
-            "📋 <b>Available Commands</b>\n\n"
-            "📊 <b>Account</b>\n"
-            "/status — open positions + P&L\n"
-            "/balance — balance & equity\n"
-            "/positions — same as /status\n\n"
-            "🔧 <b>Trade Control</b>\n"
-            "/pause — stop new trades (manages existing)\n"
-            "/resume — start scanning again\n"
-            "/close TICKET — close a position\n"
+            " <b>Available Commands</b>\n\n"
+            " <b>Account</b>\n"
+            "/status -- open positions + P&L\n"
+            "/balance -- balance & equity\n"
+            "/positions -- same as /status\n\n"
+            " <b>Trade Control</b>\n"
+            "/pause -- stop new trades (manages existing)\n"
+            "/resume -- start scanning again\n"
+            "/close TICKET -- close a position\n"
             "  e.g. <code>/close 2055657403</code>\n\n"
-            "🎯 <b>Bias Override</b>\n"
-            "/setbias SYMBOL DIR — force direction\n"
+            " <b>Bias Override</b>\n"
+            "/setbias SYMBOL DIR -- force direction\n"
             "  e.g. <code>/setbias BTCUSD buy</code>\n"
-            "/bias — show current overrides\n"
-            "/clearbias — reset all to auto"
+            "/bias -- show current overrides\n"
+            "/clearbias -- reset all to auto"
         )
 
 
 def _poll_loop():
     """Background thread: polls Telegram getUpdates for commands."""
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        logger.warning("Telegram not configured — command polling disabled.")
+        logger.warning("Telegram not configured -- command polling disabled.")
         return
 
     offset = 0

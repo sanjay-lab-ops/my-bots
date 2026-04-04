@@ -1,11 +1,11 @@
 """
-Market Structure Analysis — Smart Money Concepts
+Market Structure Analysis -- Smart Money Concepts
 Identifies trend direction, Break of Structure (BOS), and Change of Character (CHoCH).
 
 Institutional context:
   - Institutions only trade WITH the trend
-  - BOS confirms trend continuation → add to position
-  - CHoCH = first warning trend is reversing → tighten SL, reduce risk
+  - BOS confirms trend continuation -> add to position
+  - CHoCH = first warning trend is reversing -> tighten SL, reduce risk
 """
 
 import numpy as np
@@ -68,21 +68,21 @@ def analyze_structure(df: pd.DataFrame) -> dict:
     else:
         trend = "ranging"
 
-    # Break of Structure (BOS) — price closes beyond last swing in trend direction
+    # Break of Structure (BOS) -- price closes beyond last swing in trend direction
     bos   = False
     choch = False
     note  = f"Trend={trend.upper()} | SH={last_sh:.2f} SL={last_sl:.2f}"
 
     if trend == "bullish":
-        bos   = current_price > last_sh          # broke above swing high → BOS up
-        choch = current_price < last_sl          # broke below swing low → CHoCH (danger)
-        if bos:   note += " | BOS ↑ (continuation)"
-        if choch: note += " | CHoCH ↓ (reversal warning)"
+        bos   = current_price > last_sh          # broke above swing high -> BOS up
+        choch = current_price < last_sl          # broke below swing low -> CHoCH (danger)
+        if bos:   note += " | BOS ^ (continuation)"
+        if choch: note += " | CHoCH v (reversal warning)"
     elif trend == "bearish":
-        bos   = current_price < last_sl          # broke below swing low → BOS down
-        choch = current_price > last_sh          # broke above swing high → CHoCH (danger)
-        if bos:   note += " | BOS ↓ (continuation)"
-        if choch: note += " | CHoCH ↑ (reversal warning)"
+        bos   = current_price < last_sl          # broke below swing low -> BOS down
+        choch = current_price > last_sh          # broke above swing high -> CHoCH (danger)
+        if bos:   note += " | BOS v (continuation)"
+        if choch: note += " | CHoCH ^ (reversal warning)"
 
     return {
         "trend":          trend,

@@ -27,7 +27,7 @@ from cross_bot_lock import claim as _cb_claim, confirm as _cb_confirm, release a
 load_dotenv()
 
 # ── Logging setup ────────────────────────────────────────────────
-from config import LOG_FILE, LOOP_INTERVAL_SECONDS, SYMBOLS, MAX_TRADES_PER_DAY, MANUAL_MODE, RISK_PERCENT, RR_RATIO, MIN_BALANCE_TO_TRADE
+from config import LOG_FILE, LOOP_INTERVAL_SECONDS, SYMBOLS, MAX_TRADES_PER_DAY, MANUAL_MODE, RISK_PERCENT, RR_RATIO, MIN_BALANCE_TO_TRADE, DAILY_LOSS_LIMIT
 
 logging.basicConfig(
     level=logging.INFO,
@@ -118,6 +118,16 @@ def bot_tick(bypass_session: bool = False):
     trigger = "4H-CLOSE" if bypass_session else "SESSION"
     logger.info("─── Bot tick [%s] | UTC %s ───", trigger, datetime.now(timezone.utc).strftime("%H:%M:%S"))
 
+    # ── Daily loss limit check ────────────────────────────────────
+    _bal = get_balance()
+    _day_pnl = sum(p.profit for p in (mt5.history_deals_get(
+        datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0),
+        datetime.now(timezone.utc)) or []) if p.entry == 1 and p.magic == 20260318)
+    if _bal > 0 and _day_pnl <= _bal * (DAILY_LOSS_LIMIT / 100):
+        logger.warning("🛑 Daily loss limit %.1f%% hit ($%.2f) — halting trading for today", DAILY_LOSS_LIMIT, _day_pnl)
+        import time as _t; _t.sleep(3600)
+        return
+
     # ── Manage open positions first (breakeven + trailing stop) ──
     from mt5_connector import get_candles as _gc
     from indicators    import atr as _atr
@@ -168,10 +178,11 @@ def bot_tick(bypass_session: bool = False):
             logger.info("%s: max trades/day reached (%d)", symbol, MAX_TRADES_PER_DAY)
             continue
 
-        # ── Cross-bot: skip if ANY bot has a position on this symbol ─
-        positions = get_open_positions(mt5_sym)   # all magics
+        # ── Cross-bot: skip if any BOT (not manual) has a position on this symbol ─
+        _bot_magics = {20260327, 20260318, 20260101, 20250101, 20260319, 20260320}
+        positions = [p for p in get_open_positions(mt5_sym) if p.magic in _bot_magics]
         if positions:
-            logger.info("%s: position already open (any bot, ticket %d) — skip",
+            logger.info("%s: bot position already open (ticket %d) — skip",
                         symbol, positions[0].ticket)
             continue
 

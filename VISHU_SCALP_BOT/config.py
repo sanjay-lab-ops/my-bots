@@ -23,20 +23,22 @@ SYMBOLS = {
         "contract_size": 1,
         "min_lot":       0.1,
         "lot_step":      0.1,
-        "max_lot":       2.0,
+        "max_lot":       0.5,
         "digits":        2,
-        "min_balance":   30,
+        "min_balance":   18,
         "force_min_lot": False,
+        "min_atr":       1.0,   # skip ETH if 1M ATR < $1 (too flat, spread eats trade)
     },
     "BTCUSD": {
         "mt5_symbol":    "BTCUSDm",
         "contract_size": 1,
-        "min_lot":       0.01,
-        "lot_step":      0.01,
-        "max_lot":       0.1,
+        "min_lot":       0.1,
+        "lot_step":      0.1,
+        "max_lot":       0.5,
         "digits":        2,
-        "min_balance":   30,
+        "min_balance":   18,
         "force_min_lot": False,
+        "min_atr":       20.0,  # skip BTC if 1M ATR < $20 (too flat)
     },
     "XAUUSD": {
         "mt5_symbol":    "XAUUSDm",
@@ -45,7 +47,7 @@ SYMBOLS = {
         "lot_step":      0.01,
         "max_lot":       0.01,
         "digits":        2,
-        "min_balance":   30,
+        "min_balance":   18,
         "force_min_lot": True,
     },
     "XAGUSD": {
@@ -55,20 +57,20 @@ SYMBOLS = {
         "lot_step":      0.01,
         "max_lot":       0.01,
         "digits":        3,
-        "min_balance":   30,
+        "min_balance":   200,
         "force_min_lot": True,
     },
 }
 
 # ── Risk ───────────────────────────────────────────────────────────
 RISK_PERCENT     = 1.0    # 1% per trade
-DAILY_LOSS_LIMIT = -6.0   # stop at -6% for the day
-MAX_OPEN         = 2      # 2 trades open at once across all symbols
-RR_RATIO         = 1.0    # 1:1 RR — small TP hit fast in seconds
+DAILY_LOSS_LIMIT = -15.0  # stop at -15% for the day
+MAX_OPEN         = 1      # 1 trade open at a time across all symbols
+RR_RATIO         = 1.5    # 1.5:1 RR — reward must exceed risk
 
 # ── Scalp Speed Settings ───────────────────────────────────────────
 ATR_PERIOD      = 5       # very short ATR — reacts to latest price action
-ATR_SL_MULT     = 1.0    # SL = 1.0 × ATR — enough to clear broker min distance
+ATR_SL_MULT     = 1.5    # SL = 1.5 × ATR — more breathing room, avoids noise stops
 EMA_FAST        = 3       # faster EMA cross signals
 EMA_SLOW        = 8       # faster EMA slow
 RSI_PERIOD      = 7
@@ -82,7 +84,7 @@ RSI_SELL_MAX    = 80      # don't sell if RSI above 80 (too spiked, wait)
 
 # ── Time Exit — close trade after N minutes if TP/SL not hit ──────
 # Prevents trades sitting open for hours eating spread
-MAX_TRADE_MINUTES = 5     # close trade after 5 minutes regardless
+MAX_TRADE_MINUTES = 30    # close trade after 30 minutes if TP/SL not hit
 
 # ── Breakeven + Trail ──────────────────────────────────────────────
 BREAKEVEN_PCT   = 0.5

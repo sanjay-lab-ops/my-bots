@@ -1,5 +1,5 @@
 """
-VISHU SMC BOT — Main Loop
+VISHU SMC BOT -- Main Loop
 Institutional Smart Money Concepts Trading Bot
 
 How this differs from retail:
@@ -7,8 +7,8 @@ How this differs from retail:
   THIS BOT: Identifies where institutions placed orders (Order Blocks), places LIMIT
             orders there at the SAME price as BlackRock, then rides the institutional move.
 
-Runs 24/7 — no session limits. Trades all 4 pairs whenever a valid signal appears.
-Compounds capital automatically — 1.5% risk grows with every winning trade.
+Runs 24/7 -- no session limits. Trades all 4 pairs whenever a valid signal appears.
+Compounds capital automatically -- 1.5% risk grows with every winning trade.
 """
 
 import time
@@ -88,7 +88,7 @@ def _in_session(symbol: str, now_utc: datetime) -> bool:
     return False
 from mt5_conn import (connect, disconnect, reconnect, get_candles,
                       get_account_balance, get_day_pnl, get_open_positions, get_pending_orders)
-from indicators import atr as calc_atr
+from indicators import atr as calc_atr, anchored_vwap as calc_avwap, volume_average as calc_vol_avg
 from market_structure import analyze_structure
 from order_blocks import find_order_blocks, find_nearest_ob
 from fvg import find_fvgs, find_nearest_fvg
@@ -111,12 +111,12 @@ def ist_time() -> str:
 
 def print_header(balance: float, stats: dict):
     now_ist = (datetime.now(timezone.utc) + IST).strftime("%d %b %Y %H:%M IST")
-    sep = "═" * 64
+    sep = "=" * 64
     print(f"\n{sep}")
-    print(f"  VISHU SMC BOT — Smart Money Concepts")
+    print(f"  VISHU SMC BOT -- Smart Money Concepts")
     print(f"  {now_ist}")
     print(f"  Balance : ${balance:.2f}  |  Total growth: +{stats.get('total_pnl_pct', 0):.1f}%")
-    print(f"  Pairs   : BTC · ETH · XAU · XAG  |  Running 24/7")
+    print(f"  Pairs   : BTC / ETH / XAU / XAG  |  Running 24/7")
     print(sep)
 
 
@@ -136,21 +136,21 @@ def run():
         stats = get_compound_stats()
 
     print_header(balance, stats)
-    # Command listener disabled — Bot 2 handles all Telegram commands
+    # Command listener disabled -- Bot 2 handles all Telegram commands
     # telegram_commands.start()
     tg.bot_started(balance, stats.get("total_pnl_pct", 0))
 
     last_day        = datetime.now(timezone.utc).date()
     day_trades      = 0
-    placed_this_run = _load_placed()   # persists across restarts — survives crashes
-    prev_milestones = _load_milestones()  # persists across restarts — no duplicate alerts
+    placed_this_run = _load_placed()   # persists across restarts -- survives crashes
+    prev_milestones = _load_milestones()  # persists across restarts -- no duplicate alerts
 
     while True:
         try:
             now_utc   = datetime.now(timezone.utc)
             now_ist   = now_utc + IST
 
-            # ── Midnight UTC reset ───────────────────────────────────
+            # -- Midnight UTC reset -----------------------------------
             if now_utc.date() != last_day:
                 # Sync balance from MT5 at day start
                 balance        = get_account_balance()
@@ -162,7 +162,7 @@ def run():
                 _save_placed(placed_this_run)
                 prev_milestones.clear()
                 _save_milestones(prev_milestones)
-                logger.info("Midnight reset — placed_this_run + milestones cleared")
+                logger.info("Midnight reset -- placed_this_run + milestones cleared")
                 last_day      = now_utc.date()
 
                 tg.daily_summary(
@@ -172,12 +172,12 @@ def run():
                     win_rate=stats.get("win_rate", 0),
                     trades=stats.get("total_trades", 0),
                 )
-                print(f"\n  [{ist_time()}] New day — balance ${balance:.2f}")
+                print(f"\n  [{ist_time()}] New day -- balance ${balance:.2f}")
 
-            # ── EOD close at 16:00 UTC (21:30 IST) — close all, cancel all pending ──
+            # -- EOD close at 16:00 UTC (21:30 IST) -- close all, cancel all pending --
             if now_utc.hour == 16 and now_utc.minute == 0:
                 import MetaTrader5 as _mt5eod
-                print(f"\n  [{ist_time()}] EOD 21:30 IST — closing all positions and pending orders")
+                print(f"\n  [{ist_time()}] EOD 21:30 IST -- closing all positions and pending orders")
                 _all_pos = _mt5eod.positions_get() or []
                 for _pos in _all_pos:
                     _dir_type = _mt5eod.ORDER_TYPE_SELL if _pos.type == 0 else _mt5eod.ORDER_TYPE_BUY
@@ -210,20 +210,21 @@ def run():
                     win_rate=stats.get("win_rate", 0),
                     trades=stats.get("total_trades", 0),
                 )
-                print(f"  [{ist_time()}] EOD done — sleeping until midnight.")
+                print(f"  [{ist_time()}] EOD done -- sleeping until midnight.")
                 time.sleep(3600)
                 continue
 
-            # ── Daily loss limit check ───────────────────────────────
+            # -- Daily loss limit check -------------------------------
             day_pnl = get_day_pnl()
             balance  = get_account_balance()
 
             if day_pnl <= -(balance * abs(DAILY_LOSS_LIMIT)):
-                print(f"  [{ist_time()}] ⚠️ Daily loss limit reached (${day_pnl:.2f}) — DEMO MODE: continuing anyway.")
+                print(f"  [{ist_time()}] [STOP] Daily loss limit reached (${day_pnl:.2f}) -- halting trading for today.")
                 tg.daily_loss_limit(balance)
-                # Demo mode: log warning but do NOT stop trading
+                import time as _time; _time.sleep(3600)
+                continue
 
-            # ── Compound milestone check ─────────────────────────────
+            # -- Compound milestone check -----------------------------
             total_pct = stats.get("total_pnl_pct", 0)
             for milestone in [10, 25, 50, 100, 200, 500]:
                 if total_pct >= milestone and milestone not in prev_milestones:
@@ -231,7 +232,7 @@ def run():
                     prev_milestones.add(milestone)
                     _save_milestones(prev_milestones)
 
-            # ── Detect SL/TP closes from last tick ──────────────────
+            # -- Detect SL/TP closes from last tick ------------------
             all_open = get_open_positions()
             current_tickets = {p["ticket"] for p in all_open}
             sl_hit = detect_closed_positions(current_tickets, tg=tg)
@@ -239,30 +240,30 @@ def run():
                 if sym in placed_this_run:
                     placed_this_run.discard(sym)
                     _save_placed(placed_this_run)
-                    logger.info("SL hit on %s — re-entry unlocked for today", sym)
-                    print(f"    {sym}: SL hit — re-entry unlocked")
+                    logger.info("SL hit on %s -- re-entry unlocked for today", sym)
+                    print(f"    {sym}: SL hit -- re-entry unlocked")
             for sym in ["BTCUSD", "ETHUSD", "XAUUSD", "XAGUSD"]:
                 mt5s = SYMBOLS[sym]["mt5_symbol"]
                 snapshot_positions(sym, [p for p in all_open if p["symbol"] == mt5s])
 
-            # ── Cancel stale pending orders ──────────────────────────
+            # -- Cancel stale pending orders --------------------------
             cancel_stale_pending_orders(max_age_minutes=240)
 
-            # ── Pre-news accumulation check ──────────────────────────
+            # -- Pre-news accumulation check --------------------------
             pre_news, pre_news_event, hrs_to = is_pre_news_accumulation()
             if pre_news:
                 print(f"  [{ist_time()}] PRE-NEWS WINDOW: {pre_news_event} in {hrs_to}h "
-                      f"— scanning aggressively like institutions")
-                atr_relax = 0.5   # relax ATR minimum by 50% — institutions accumulate quietly
+                      f"-- scanning aggressively like institutions")
+                atr_relax = 0.5   # relax ATR minimum by 50% -- institutions accumulate quietly
             else:
                 atr_relax = 1.0   # normal ATR filter
 
-            # ── Pause check ──────────────────────────────────────────
+            # -- Pause check ------------------------------------------
             if is_paused():
-                print(f"  [{ist_time()}] ⏸ Bot PAUSED — managing open positions only")
+                print(f"  [{ist_time()}]  Bot PAUSED -- managing open positions only")
                 continue
 
-            # ── Scan each pair ───────────────────────────────────────
+            # -- Scan each pair ---------------------------------------
             print(f"\n  [{ist_time()}] Scanning 4 pairs... Balance=${balance:.2f}")
 
             # ETH/BTC and XAG/XAU correlation trackers
@@ -273,29 +274,38 @@ def run():
                 cfg     = SYMBOLS[symbol]
                 mt5_sym = cfg["mt5_symbol"]
 
-                # Bot 3 is 24/7 — no session filter, SMC scans all hours
+                # Bot 3 is 24/7 -- no session filter, SMC scans all hours
 
-                # Balance protection — skip if account too small for this symbol
+                # Balance protection -- skip if account too small for this symbol
                 min_bal = MIN_BALANCE_TO_TRADE.get(symbol, 0)
                 if balance < min_bal:
-                    print(f"    {symbol}: Balance ${balance:.2f} < ${min_bal} minimum — skipping (protect live account)")
+                    logger.info("[%s] Balance $%.2f < $%d minimum -- skipping", symbol, balance, min_bal)
                     continue
+
+                # Weekend block -- XAU and XAG closed on Saturday and Sunday
+                if symbol in ("XAUUSD", "XAGUSD"):
+                    _wd = datetime.now(timezone.utc).weekday()  # 5=Sat, 6=Sun
+                    if _wd >= 5:
+                        logger.info("[%s] Closed on weekends -- skipping", symbol)
+                        continue
 
                 # News filter
                 news_blocked, news_reason = is_news_window(symbol)
                 if news_blocked:
-                    print(f"    {symbol}: News — {news_reason}")
+                    print(f"    {symbol}: News -- {news_reason}")
                     continue
 
-                # Cross-bot: check if ANY bot has a position on this symbol
+                # Cross-bot: check if any BOT (not manual) has a position on this symbol
                 import MetaTrader5 as _mt5x
-                all_pos_sym = _mt5x.positions_get(symbol=mt5_sym) or []
+                from config import MAGIC_NUMBER as _MY_MAGIC
+                _bot_magics = {20260327, 20260318, 20260101, 20250101, 20260319, 20260320, _MY_MAGIC}
+                all_pos_sym = [p for p in (_mt5x.positions_get(symbol=mt5_sym) or []) if p.magic in _bot_magics]
                 if all_pos_sym:
                     # Cancel any of our own pending orders for this symbol
                     _pend = [o for o in get_pending_orders() if o["symbol"] == mt5_sym]
                     for _po in _pend:
                         cancel_pending_order(_po["ticket"])
-                        print(f"    {symbol}: Cancelled pending #{_po['ticket']} — live position exists")
+                        print(f"    {symbol}: Cancelled pending #{_po['ticket']} -- live position exists")
                     # Manage if it's our own position
                     open_pos = [p for p in get_open_positions() if p["symbol"] == mt5_sym]
                     if open_pos:
@@ -308,14 +318,14 @@ def run():
                                          balance_ref=[balance])
                         print(f"    {symbol}: Managing open position (P&L: ${open_pos[0]['profit']:.2f})")
                     else:
-                        print(f"    {symbol}: Cross-bot position open — skipping")
+                        logger.info("[%s] Cross-bot position open -- skipping", symbol)
                     continue
 
-                # Already placed for this symbol in this run session?
+                # Already placed for this symbol in this run session
                 if symbol in placed_this_run:
                     continue
 
-                # Already have a pending limit order for this symbol?
+                # Already have a pending limit order for this symbol
                 pending = [o for o in get_pending_orders() if o["symbol"] == mt5_sym]
                 if pending:
                     import MetaTrader5 as _mt5_mod
@@ -326,17 +336,17 @@ def run():
                     gap_pct = (gap / cur * 100) if cur else 0
                     order_type = "BUY LIMIT" if o["type"] == 2 else "SELL LIMIT"
                     age_m   = int((datetime.now(timezone.utc) - o["time"]).total_seconds() / 60)
-                    print(f"    {symbol}: ⏳ {order_type} @ {o['price']:.3f} | "
+                    print(f"    {symbol}:  {order_type} @ {o['price']:.3f} | "
                           f"Current={cur:.3f} | Gap={gap:.2f} ({gap_pct:.1f}% away) | "
                           f"SL={o['sl']:.3f} TP={o['tp']:.3f} | Age={age_m}min")
                     continue
 
-                # ── Fetch data ───────────────────────────────────────
+                # -- Fetch data ---------------------------------------
                 df_h4  = get_candles(mt5_sym, "H4",  300)   # 300 = ~50 days, enough for swing detection
                 df_h1  = get_candles(mt5_sym, "H1",  200)
 
                 if df_h4 is None or df_h4.empty or df_h1 is None or df_h1.empty:
-                    print(f"    {symbol}: No data — check symbol name in config.py")
+                    print(f"    {symbol}: No data -- check symbol name in config.py")
                     continue
 
                 atr_val = calc_atr(df_h4, ATR_PERIOD).iloc[-1]
@@ -344,21 +354,21 @@ def run():
                 # ATR volatility filter (relaxed during pre-news accumulation window)
                 atr_threshold = cfg["atr_min"] * atr_relax
                 if atr_val < atr_threshold:
-                    print(f"    {symbol}: ATR {atr_val:.2f} < {atr_threshold:.2f} — too choppy"
+                    print(f"    {symbol}: ATR {atr_val:.2f} < {atr_threshold:.2f} -- too choppy"
                           + (" (pre-news relaxed)" if pre_news else ""))
                     continue
 
-                # ── Market structure ─────────────────────────────────
+                # -- Market structure ---------------------------------
                 structure = analyze_structure(df_h4)
                 trend     = structure["trend"]
 
                 if trend == "ranging":
-                    print(f"    {symbol}: Ranging — no trade ({structure['structure_note']})")
+                    logger.info("[%s] Ranging -- no trade (%s)", symbol, structure.get("structure_note", ""))
                     continue
 
-                # Skip if CHoCH detected — structure is breaking, wait for clarity
+                # Skip if CHoCH detected -- structure is breaking, wait for clarity
                 if structure["choch"]:
-                    print(f"    {symbol}: CHoCH detected — waiting for new structure")
+                    print(f"    {symbol}: CHoCH detected -- waiting for new structure")
                     continue
 
                 direction = "buy" if trend == "bullish" else "sell"
@@ -373,18 +383,18 @@ def run():
                 if symbol == "BTCUSD":
                     _btc_smc_direction = direction
                 elif symbol == "ETHUSD" and _btc_smc_direction and direction != _btc_smc_direction:
-                    print(f"    ETHUSD: CORRELATION SKIP — BTC={_btc_smc_direction.upper()} "
-                          f"but ETH={direction.upper()} — skipping")
+                    print(f"    ETHUSD: CORRELATION SKIP -- BTC={_btc_smc_direction.upper()} "
+                          f"but ETH={direction.upper()} -- skipping")
                     continue
                 _xag_smc_divergence = False
                 if symbol == "XAUUSD":
                     _xau_smc_direction = direction
                 elif symbol == "XAGUSD" and _xau_smc_direction and direction != _xau_smc_direction:
                     _xag_smc_divergence = True
-                    print(f"    XAGUSD: DIVERGENCE — XAU={_xau_smc_direction.upper()} "
-                          f"but XAG={direction.upper()} — trading min lot 0.01")
+                    print(f"    XAGUSD: DIVERGENCE -- XAU={_xau_smc_direction.upper()} "
+                          f"but XAG={direction.upper()} -- trading min lot 0.01")
 
-                # ── Counter-trend bounce check ───────────────────────
+                # -- Counter-trend bounce check -----------------------
                 # When price sweeps a major swing low/high (liquidity grab),
                 # a bounce trade in the opposite direction (fixed 0.01 lot only)
                 # can capture the move back to the OB before the trend resumes.
@@ -395,7 +405,7 @@ def run():
                 _swing_high = structure.get("last_sh", 0) or 0
                 _bounce_dir = None
 
-                # BULLISH trend: if price swept above swing high → bounce SELL
+                # BULLISH trend: if price swept above swing high -> bounce SELL
                 if direction == "buy" and _swing_high > 0:
                     sweep_dist_up = _cur_price - _swing_high
                     if 0 < sweep_dist_up < atr_val * 1.0:
@@ -415,9 +425,9 @@ def run():
                                 if _b2:
                                     tg.trade_opened(symbol, "SELL (BOUNCE)", 0.01,
                                                     _cur_price, _bounce_sl2, _bounce_tp2)
-                                    print(f"    {symbol}: ✅ Bounce SELL #{_b2} filled")
+                                    print(f"    {symbol}: [OK] Bounce SELL #{_b2} filled")
 
-                # BEARISH trend: if price swept below swing low by > 0.5× ATR → bounce BUY
+                # BEARISH trend: if price swept below swing low by > 0.5x ATR -> bounce BUY
                 if direction == "sell" and _swing_low > 0:
                     sweep_dist = _swing_low - _cur_price
                     if 0 < sweep_dist < atr_val * 1.0:   # swept low, not too far
@@ -440,17 +450,17 @@ def run():
                                 if _b_ticket:
                                     tg.trade_opened(symbol, "BUY (BOUNCE)", 0.01,
                                                     _bounce_entry, _bounce_sl, _bounce_tp)
-                                    print(f"    {symbol}: ✅ Bounce BUY #{_b_ticket} filled")
+                                    print(f"    {symbol}: [OK] Bounce BUY #{_b_ticket} filled")
 
-                # ── Order block detection ────────────────────────────
+                # -- Order block detection ----------------------------
                 obs        = find_order_blocks(df_h4, trend)
                 nearest_ob = find_nearest_ob(obs, df_h4["close"].iloc[-1], direction)
 
-                # ── FVG detection (H1 for precision) ─────────────────
+                # -- FVG detection (H1 for precision) -----------------
                 fvgs       = find_fvgs(df_h1)
                 nearest_fvg = find_nearest_fvg(fvgs, df_h1["close"].iloc[-1], direction)
 
-                # ── Select entry level ───────────────────────────────
+                # -- Select entry level -------------------------------
                 entry_price = None
                 entry_reason = ""
                 ob_top = ob_bottom = None
@@ -466,10 +476,54 @@ def run():
                     ob_bottom    = nearest_fvg["bottom"]
                     entry_reason = "FVG fill"
                 else:
-                    print(f"    {symbol}: No OB or FVG near current price — skip")
+                    print(f"    {symbol}: No OB or FVG near current price -- skip")
                     continue
 
-                # ── SL/TP ────────────────────────────────────────────
+                # -- Anchored VWAP + Volume Average filters -----------
+                # AVWAP anchored to last swing low (BUY) or last swing high (SELL).
+                # Entry should be near fair value, not overextended.
+                # Volume must be at least 50% of 20-bar average (active market).
+                try:
+                    import numpy as _np
+                    _cur_px_fv = df_h4["close"].iloc[-1]
+                    _avwap_val = None
+
+                    if direction == "buy" and structure.get("last_sl"):
+                        # Anchor to bar whose low is closest to last swing low
+                        _anchor_pos = int((df_h4["low"] - structure["last_sl"]).abs().values.argmin())
+                        _avwap_val  = calc_avwap(df_h4, _anchor_pos)
+                    elif direction == "sell" and structure.get("last_sh"):
+                        # Anchor to bar whose high is closest to last swing high
+                        _anchor_pos = int((df_h4["high"] - structure["last_sh"]).abs().values.argmin())
+                        _avwap_val  = calc_avwap(df_h4, _anchor_pos)
+
+                    _vol_avg_val = calc_vol_avg(df_h4, 20)
+                    _cur_vol     = float(df_h4["tick_volume"].iloc[-1])
+                    _vol_ratio   = _cur_vol / max(_vol_avg_val, 1)
+
+                    # Volume guard — skip if market is dead (< 50% avg volume)
+                    if _vol_ratio < 0.5:
+                        print(f"    {symbol}: LOW VOLUME ({_vol_ratio:.1f}x avg) -- dead market, skip")
+                        continue
+
+                    # AVWAP filter — entry must be near fair value
+                    if _avwap_val and not _np.isnan(_avwap_val):
+                        _avwap_tol = atr_val * 1.5   # allow 1.5×ATR from AVWAP
+                        _avwap_ok  = abs(_cur_px_fv - _avwap_val) <= _avwap_tol
+                        if not _avwap_ok:
+                            _side = "above" if _cur_px_fv > _avwap_val else "below"
+                            print(f"    {symbol}: AVWAP filter — price {_cur_px_fv:.2f} is "
+                                  f"{_side} AVWAP {_avwap_val:.2f} by "
+                                  f"{abs(_cur_px_fv - _avwap_val):.2f} (>{_avwap_tol:.2f}) -- overextended, skip")
+                            continue
+                        entry_reason += f" | AVWAP={_avwap_val:.2f} Vol={_vol_ratio:.1f}x"
+                        print(f"    {symbol}: AVWAP={_avwap_val:.2f} ✓ | Volume={_vol_ratio:.1f}x avg ✓")
+                    else:
+                        print(f"    {symbol}: AVWAP unavailable -- proceeding without filter")
+                except Exception as _avwap_e:
+                    logger.warning("[%s] AVWAP/Volume filter error (non-critical): %s", symbol, _avwap_e)
+
+                # -- SL/TP --------------------------------------------
                 if direction == "buy":
                     sl = ob_bottom * (1 - SL_BUFFER_PCT / 100) if ob_bottom else entry_price - atr_val * 1.5
                     sl_dist = entry_price - sl
@@ -478,14 +532,14 @@ def run():
                     sl_dist = sl - entry_price
 
                 if sl_dist <= 0:
-                    print(f"    {symbol}: Invalid SL distance — skip")
+                    print(f"    {symbol}: Invalid SL distance -- skip")
                     continue
 
                 # TP: nearest liquidity pool, fallback to ATR-based RR
                 liquidity = find_liquidity_pools(df_h4)
                 tp        = find_tp_target(liquidity, direction, entry_price)
 
-                # Validate RR — if liquidity TP gives poor RR, use ATR-based target instead
+                # Validate RR -- if liquidity TP gives poor RR, use ATR-based target instead
                 if tp:
                     actual_rr = abs(tp - entry_price) / sl_dist if sl_dist > 0 else 0
                     if actual_rr < 1.5:
@@ -493,7 +547,7 @@ def run():
                         tp = (entry_price + sl_dist * RR_RATIO
                               if direction == "buy"
                               else entry_price - sl_dist * RR_RATIO)
-                        print(f"    {symbol}: Liquidity TP RR too low — using ATR TP {tp:.3f}")
+                        print(f"    {symbol}: Liquidity TP RR too low -- using ATR TP {tp:.3f}")
                 else:
                     tp = (entry_price + sl_dist * RR_RATIO
                           if direction == "buy"
@@ -501,34 +555,34 @@ def run():
 
                 actual_rr = abs(tp - entry_price) / sl_dist if sl_dist > 0 else 0
 
-                # ── Lot size (compounding) ───────────────────────────
+                # -- Lot size (compounding) ---------------------------
                 lot = calculate_lot(balance, sl_dist, symbol)
                 if lot <= 0:
-                    print(f"    {symbol}: Account too small — skip")
+                    print(f"    {symbol}: Account too small -- skip")
                     continue
-                # XAG divergence from XAU — cap at min lot to limit risk
+                # XAG divergence from XAU -- cap at min lot to limit risk
                 if symbol == "XAGUSD" and _xag_smc_divergence:
                     lot = cfg.get("min_lot", 0.01)
-                    print(f"    {symbol}: DIVERGENCE LOT CAP → 0.01 (XAU disagreement)")
+                    print(f"    {symbol}: DIVERGENCE LOT CAP -> 0.01 (XAU disagreement)")
 
-                # ── Elite: Kill zone + Market state + Sweep check ────────
+                # -- Elite: Kill zone + Market state + Sweep check --------
                 try:
                     in_kz, kz_name = is_kill_zone(mt5_sym)
                     state, s_ratio = get_market_state(df_h4, symbol)
                     sweep, sw_msg  = detect_liquidity_sweep(df_h1, direction, symbol)
-                    state_emoji    = {"TRENDING": "📈", "CONSOLIDATING": "↔️", "VOLATILE": "⚡"}.get(state, "")
+                    state_emoji    = {"TRENDING": "[TREND]", "CONSOLIDATING": "[RANGE]", "VOLATILE": "[VOL]"}.get(state, "")
                     print(f"    {symbol}: {state_emoji} {state} | "
-                          f"{'✅ KZ:'+kz_name if in_kz else '⚠️ Outside KZ'} | "
-                          f"{'🎯 SWEEP ENTRY' if sweep else 'Limit entry'}")
+                          f"{'[OK] KZ:'+kz_name if in_kz else '[WARN] Outside KZ'} | "
+                          f"{'[TARGET] SWEEP ENTRY' if sweep else 'Limit entry'}")
                     if sweep:
                         print(f"    {symbol}: {sw_msg}")
 
-                    # ── Kill zone gate — no new trades in dead zones ──────
+                    # -- Kill zone gate -- no new trades in dead zones ------
                     # Dead zones: 05:00-07:00 UTC, 12:00-13:00 UTC, 17:00-24:00 UTC
                     # Trades placed in dead zones get caught by bank manipulation at next open.
                     # Only allow entry during kill zones OR if a liquidity sweep is detected.
                     if not in_kz and not sweep:
-                        print(f"    {symbol}: ⏳ Outside kill zone — waiting for KZ (no dead zone entries)")
+                        print(f"    {symbol}:  Outside kill zone -- waiting for KZ (no dead zone entries)")
                         continue
 
                     # Adjust lot for market state
@@ -538,22 +592,22 @@ def run():
                 except Exception as _elite_e:
                     logger.warning("Elite check error (non-critical): %s", _elite_e)
 
-                # ── Smart entry: OB pullback vs momentum market entry ───
+                # -- Smart entry: OB pullback vs momentum market entry ---
                 import MetaTrader5 as _mt5mod
                 tick        = _mt5mod.symbol_info_tick(mt5_sym)
                 current_px  = tick.bid if tick else entry_price
                 ob_distance = abs(entry_price - current_px)
                 use_market  = False
 
-                # If OB is more than 2× ATR away AND price is already moving
-                # strongly in the right direction → enter at market (momentum entry)
+                # If OB is more than 2x ATR away AND price is already moving
+                # strongly in the right direction -> enter at market (momentum entry)
                 if ob_distance > atr_val * 2:
                     if direction == "sell" and current_px < entry_price:
                         use_market   = True
-                        entry_reason += " [MOMENTUM — OB too far, market entry]"
+                        entry_reason += " [MOMENTUM -- OB too far, market entry]"
                     elif direction == "buy" and current_px > entry_price:
                         use_market   = True
-                        entry_reason += " [MOMENTUM — OB too far, market entry]"
+                        entry_reason += " [MOMENTUM -- OB too far, market entry]"
 
                 if use_market:
                     # Recalculate SL/TP from current price for market entry
@@ -567,23 +621,23 @@ def run():
                     actual_rr = abs(tp - current_px) / sl_dist if sl_dist > 0 else 0
                     lot       = calculate_lot(balance, sl_dist, symbol)
                     if lot <= 0:
-                        print(f"    {symbol}: Account too small for market entry — skip")
+                        print(f"    {symbol}: Account too small for market entry -- skip")
                         continue
                     print(f"    {symbol}: {direction.upper()} MARKET @ {current_px:.3f} | "
                           f"SL={sl:.3f} TP={tp:.3f} | Lot={lot} | RR=1:{actual_rr:.1f} | {entry_reason}")
                     if MANUAL_MODE:
-                        # Cross-bot check — skip if any position already open
+                        # Cross-bot check -- skip if any position already open
                         import MetaTrader5 as _mt5c
                         _existing = _mt5c.positions_get(symbol=symbol+"m") or []
                         if _existing:
-                            print(f"    {symbol}: Cross-bot position open — skipping signal")
+                            print(f"    {symbol}: Cross-bot position open -- skipping signal")
                             continue
                         tg.notify_bot_signal(symbol, direction, current_px, sl, tp, lot, f"BOT3 SMC | {entry_reason}")
                         placed_this_run.add(symbol); _save_placed(placed_this_run)
-                        print(f"    {symbol}: ⏳ Signal sent to Telegram (MANUAL_MODE)")
+                        print(f"    {symbol}:  Signal sent to Telegram (MANUAL_MODE)")
                         continue
                     if not _cb_claim(symbol, "BOT3"):
-                        print(f"    {symbol}: SKIP — cross-bot lock active (another bot placing)")
+                        print(f"    {symbol}: SKIP -- cross-bot lock active (another bot placing)")
                         continue
                     ticket = place_market_order(symbol, direction, lot, sl, tp,
                                                 comment="SMC-MOMENTUM")
@@ -593,30 +647,30 @@ def run():
                         _pend2 = [o for o in get_pending_orders() if o["symbol"] == mt5_sym]
                         for _po2 in _pend2:
                             cancel_pending_order(_po2["ticket"])
-                            print(f"    {symbol}: Cancelled pending #{_po2['ticket']} — market order filled")
+                            print(f"    {symbol}: Cancelled pending #{_po2['ticket']} -- market order filled")
                         tg.trade_opened(symbol, direction.upper(), lot, current_px, sl, tp)
                         day_trades += 1
                         placed_this_run.add(symbol); _save_placed(placed_this_run)
-                        print(f"    {symbol}: ✅ Market order #{ticket} filled")
+                        print(f"    {symbol}: [OK] Market order #{ticket} filled")
                     else:
                         _cb_release(symbol)
-                        print(f"    {symbol}: ❌ Market order failed")
+                        print(f"    {symbol}: [SKIP] Market order failed")
                 else:
                     print(f"    {symbol}: {direction.upper()} LIMIT @ {entry_price:.3f} | "
                           f"SL={sl:.3f} TP={tp:.3f} | Lot={lot} | RR=1:{actual_rr:.1f} | {entry_reason}")
                     if MANUAL_MODE:
-                        # Cross-bot check — skip if any position already open
+                        # Cross-bot check -- skip if any position already open
                         import MetaTrader5 as _mt5c
                         _existing = _mt5c.positions_get(symbol=symbol+"m") or []
                         if _existing:
-                            print(f"    {symbol}: Cross-bot position open — skipping signal")
+                            print(f"    {symbol}: Cross-bot position open -- skipping signal")
                             continue
                         tg.notify_bot_signal(symbol, direction, entry_price, sl, tp, lot, f"BOT3 SMC LIMIT | {entry_reason}")
                         placed_this_run.add(symbol); _save_placed(placed_this_run)
-                        print(f"    {symbol}: ⏳ Signal sent to Telegram (MANUAL_MODE)")
+                        print(f"    {symbol}:  Signal sent to Telegram (MANUAL_MODE)")
                         continue
                     if not _cb_claim(symbol, "BOT3"):
-                        print(f"    {symbol}: SKIP — cross-bot lock active (another bot placing)")
+                        print(f"    {symbol}: SKIP -- cross-bot lock active (another bot placing)")
                         continue
                     ticket = place_limit_order(
                         symbol, direction, lot,
@@ -628,12 +682,12 @@ def run():
                         tg.limit_order_placed(symbol, direction, lot, entry_price, sl, tp, entry_reason)
                         day_trades += 1
                         placed_this_run.add(symbol); _save_placed(placed_this_run)
-                        print(f"    {symbol}: ✅ Limit order #{ticket} placed")
+                        print(f"    {symbol}: [OK] Limit order #{ticket} placed")
                     else:
                         _cb_release(symbol)
-                        print(f"    {symbol}: ❌ Limit order failed")
+                        print(f"    {symbol}: [SKIP] Limit order failed")
 
-            # ── Update balance from MT5 after each scan ──────────────
+            # -- Update balance from MT5 after each scan --------------
             mt5_balance = get_account_balance()
             if abs(mt5_balance - balance) > 0.01:
                 profit_diff = mt5_balance - balance
@@ -658,7 +712,7 @@ def run():
 
         except Exception as e:
             logger.error("Main loop error: %s", e, exc_info=True)
-            print(f"  Error: {e} — reconnecting...")
+            print(f"  Error: {e} -- reconnecting...")
             try:
                 reconnect()
             except Exception:

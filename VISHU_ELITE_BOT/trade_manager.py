@@ -26,10 +26,12 @@ from executor import modify_sl, close_trade
 from mt5_conn import get_candles, get_current_price, get_bot_positions
 from indicators import get_atr_value
 from session import is_session_active, get_ist_time_label
+from bias import get_bias
 import telegram_notify as tg
 
 # ── Closed position tracker ───────────────────────────────────────────────────
-_tracked: dict = {}   # {ticket: {symbol, type, entry, sl, tp}}
+_tracked: dict = {}          # {ticket: {symbol, type, entry, sl, tp}}
+_bias_flip_alerted: set = set()  # tickets already exited via bias flip (avoid double-close)
 
 
 def _snapshot(symbol: str, positions: list):
@@ -165,6 +167,53 @@ def check_trailing_stop(position, atr_val: float, symbol: str) -> bool:
     return False
 
 
+def check_bias_flip_exit(position, symbol: str) -> bool:
+    """
+    Exit trade early if 1H bias has flipped against the trade direction
+    AND the trade is in loss. Prevents riding losses when market reverses.
+    Returns True if trade was closed.
+    """
+    if position.ticket in _bias_flip_alerted:
+        return False
+
+    # Only cut losses — never interrupt a profitable trade
+    if position.profit >= 0:
+        return False
+
+    mt5_sym   = SYMBOLS.get(symbol, {}).get("mt5_symbol", symbol)
+    trade_dir = "BUY" if position.type == mt5.ORDER_TYPE_BUY else "SELL"
+
+    try:
+        bias_1h = get_bias(mt5_sym, mt5.TIMEFRAME_H1, 80)
+    except Exception:
+        return False
+
+    if not bias_1h:
+        return False
+
+    # Check if bias has flipped against trade direction
+    if (trade_dir == "SELL" and bias_1h == "BUY") or \
+       (trade_dir == "BUY"  and bias_1h == "SELL"):
+
+        logger.info(
+            "BIAS FLIP EXIT | Ticket=%d | %s %s | 1H bias now %s | P&L=%.2f — exiting",
+            position.ticket, trade_dir, symbol, bias_1h, position.profit,
+        )
+        _bias_flip_alerted.add(position.ticket)
+
+        if close_trade(position.ticket, symbol):
+            _tracked.pop(position.ticket, None)
+            tg.notify_trade_closed(
+                symbol, trade_dir,
+                position.price_open, position.price_current,
+                position.profit,
+                reason=f"1H bias flipped {bias_1h} — early exit to cut loss",
+            )
+            return True
+
+    return False
+
+
 def check_session_close(position, symbol: str) -> bool:
     """
     Close trade if session has ended AND trade is in profit.
@@ -235,6 +284,11 @@ def run_trade_manager() -> dict:
 
             # Session close DISABLED — let SL/TP and trail stop manage exits.
             # Closing at session end with small profit misses trend continuation.
+
+            # 0. Bias flip exit — cut loss if 1H bias reversed against trade
+            if check_bias_flip_exit(pos, symbol):
+                summary["closed"] += 1
+                continue
 
             # 1. Breakeven check
             if check_breakeven(pos, atr_val, symbol):

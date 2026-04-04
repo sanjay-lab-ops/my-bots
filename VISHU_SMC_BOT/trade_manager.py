@@ -1,17 +1,17 @@
 """
-Trade Manager — Manages open positions like an institution.
+Trade Manager -- Manages open positions like an institution.
 
 Rules (in order of priority):
-  1. If trade hits 1:1 profit (1× SL distance) → move SL to breakeven
-     → Risk is now $0. We can never lose on this trade.
-  2. If trade hits 1.5:1 → close 50% of position
-     → Locks in partial profit. Lets the rest run for full TP.
-  3. If trade hits 2.0:1 → trail SL at 1× ATR behind price
-     → Captures as much of the move as possible.
-  4. If price is nearing TP (within 0.1× ATR) → close fully
-     → Don't get greedy waiting for the last pip.
+  1. If trade hits 1:1 profit (1x SL distance) -> move SL to breakeven
+     -> Risk is now $0. We can never lose on this trade.
+  2. If trade hits 1.5:1 -> close 50% of position
+     -> Locks in partial profit. Lets the rest run for full TP.
+  3. If trade hits 2.0:1 -> trail SL at 1x ATR behind price
+     -> Captures as much of the move as possible.
+  4. If price is nearing TP (within 0.1x ATR) -> close fully
+     -> Don't get greedy waiting for the last pip.
 
-This is how institutions protect profits — they don't use fixed SL forever.
+This is how institutions protect profits -- they don't use fixed SL forever.
 They dynamically adjust as the trade develops.
 """
 
@@ -23,7 +23,7 @@ from config import SYMBOLS, MAGIC_NUMBER
 
 logger = logging.getLogger("trade_manager")
 
-# ── Closed position tracker (detects SL/TP hits) ─────────────────────────────
+# -- Closed position tracker (detects SL/TP hits) -----------------------------
 _tracked: dict = {}   # {ticket: {symbol, type, entry, sl, tp}}
 
 
@@ -36,7 +36,7 @@ def snapshot_positions(symbol: str, positions: list):
 
 
 def detect_closed_positions(current_tickets: set, tg=None) -> set:
-    """Detect SL/TP hits — any ticket missing from current open positions.
+    """Detect SL/TP hits -- any ticket missing from current open positions.
     Returns set of symbols where SL was hit (caller can unlock re-entry)."""
     import MetaTrader5 as mt5
     sl_hit_symbols = set()
@@ -53,9 +53,9 @@ def detect_closed_positions(current_tickets: set, tg=None) -> set:
                 close_price, profit = d.price, d.profit
                 tol = abs(info["tp"] - info["entry"]) * 0.05
                 if abs(close_price - info["sl"]) < tol:
-                    reason = "🛑 SL HIT"
+                    reason = " SL HIT"
                     sl_hit_symbols.add(symbol)
-                elif abs(close_price - info["tp"]) < tol: reason = "✅ TP HIT"
+                elif abs(close_price - info["tp"]) < tol: reason = " TP HIT"
                 else:                                      reason = "Manual / other"
         except Exception as e:
             logger.warning("History fetch failed ticket=%d: %s", ticket, e)
@@ -97,14 +97,14 @@ def manage_trades(symbol: str, atr_value: float, direction: str,
 
         # Determine SL distance from entry
         if sl == 0:
-            continue  # no SL set — skip (shouldn't happen)
+            continue  # no SL set -- skip (shouldn't happen)
 
         sl_dist = abs(entry - sl)
         if sl_dist == 0:
             continue
 
         # Current price implied from profit
-        # profit = (price - entry) × lot × contract_size
+        # profit = (price - entry) x lot x contract_size
         cfg           = SYMBOLS.get(symbol, {})
         contract_size = cfg.get("contract_size", 1)
         lot_val       = volume * contract_size
@@ -128,24 +128,24 @@ def manage_trades(symbol: str, atr_value: float, direction: str,
 
         ratio = move / sl_dist if sl_dist > 0 else 0
 
-        # ── 1. Breakeven at 1:1.5 ───────────────────────────────────
+        # -- 1. Breakeven at 1:1.5 -----------------------------------
         if ratio >= 1.5:
             if pos_type == 0 and sl < entry:     # BUY: SL still below entry
                 new_sl = entry + 0.01            # tiny buffer above entry
                 if modify_sl(ticket, new_sl, symbol):
-                    logger.info("BREAKEVEN [%s] ticket=%d | SL → %.5f", symbol, ticket, new_sl)
+                    logger.info("BREAKEVEN [%s] ticket=%d | SL -> %.5f", symbol, ticket, new_sl)
                     if tg:
                         tg.breakeven_triggered(symbol, entry)
 
             elif pos_type == 1 and sl > entry:   # SELL: SL still above entry
                 new_sl = entry - 0.01
                 if modify_sl(ticket, new_sl, symbol):
-                    logger.info("BREAKEVEN [%s] ticket=%d | SL → %.5f", symbol, ticket, new_sl)
+                    logger.info("BREAKEVEN [%s] ticket=%d | SL -> %.5f", symbol, ticket, new_sl)
                     if tg:
                         tg.breakeven_triggered(symbol, entry)
 
-        # ── 2. Trail near TP only (within 0.5× ATR) ────────────────────
-        # Hold full position — only trail tightly near the finish line
+        # -- 2. Trail near TP only (within 0.5x ATR) --------------------
+        # Hold full position -- only trail tightly near the finish line
         if tp > 0 and atr_value and atr_value > 0:
             dist_to_tp = abs(current_price - tp)
             if dist_to_tp < atr_value * 0.5:
@@ -153,14 +153,14 @@ def manage_trades(symbol: str, atr_value: float, direction: str,
                     trail_sl = current_price - atr_value * 0.3
                     if trail_sl > sl:
                         if modify_sl(ticket, trail_sl, symbol):
-                            logger.info("NEAR-TP TRAIL [%s] ticket=%d | SL → %.5f", symbol, ticket, trail_sl)
+                            logger.info("NEAR-TP TRAIL [%s] ticket=%d | SL -> %.5f", symbol, ticket, trail_sl)
                 else:               # SELL
                     trail_sl = current_price + atr_value * 0.3
                     if trail_sl < sl:
                         if modify_sl(ticket, trail_sl, symbol):
-                            logger.info("NEAR-TP TRAIL [%s] ticket=%d | SL → %.5f", symbol, ticket, trail_sl)
+                            logger.info("NEAR-TP TRAIL [%s] ticket=%d | SL -> %.5f", symbol, ticket, trail_sl)
 
-        # ── 4. Close near TP ─────────────────────────────────────────
+        # -- 4. Close near TP -----------------------------------------
         if tp > 0 and atr_value and atr_value > 0:
             dist_to_tp = abs(current_price - tp)
             if dist_to_tp < atr_value * 0.1:
@@ -172,7 +172,7 @@ def manage_trades(symbol: str, atr_value: float, direction: str,
                                         "buy" if pos_type == 0 else "sell",
                                         entry, current_price, profit,
                                         balance_ref[0] if balance_ref else 0,
-                                        "Near TP — institutional close")
+                                        "Near TP -- institutional close")
 
 
 def cancel_stale_pending_orders(max_age_minutes: int = 240):

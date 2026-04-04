@@ -1,7 +1,7 @@
 """
-Liquidity Pool Detection — Smart Money Concepts
+Liquidity Pool Detection -- Smart Money Concepts
 
-What are Liquidity Pools?
+What are Liquidity Pools
   Retail traders place stop losses in predictable locations:
     - Just above equal highs (buy stops)
     - Just below equal lows  (sell stops)
@@ -10,7 +10,7 @@ What are Liquidity Pools?
   Institutions SWEEP these levels to fill their large orders cheaply,
   then reverse direction. This is the "stop hunt" or "liquidity grab".
 
-  We use these levels as TP targets — institutions drive price TO these
+  We use these levels as TP targets -- institutions drive price TO these
   pools to collect liquidity, then often reverse.
 """
 
@@ -47,15 +47,15 @@ def find_liquidity_pools(df: pd.DataFrame) -> dict:
     sh = swing_highs(df, SWING_LOOKBACK).dropna().values
     sl = swing_lows( df, SWING_LOOKBACK).dropna().values
 
-    # Equal highs — buy-side liquidity (stop buys cluster here)
+    # Equal highs -- buy-side liquidity (stop buys cluster here)
     buy_pools = _cluster_levels(sh, LIQUIDITY_EQ)
     result["buy_side"] = sorted(buy_pools)
 
-    # Equal lows — sell-side liquidity (stop sells cluster here)
+    # Equal lows -- sell-side liquidity (stop sells cluster here)
     sell_pools = _cluster_levels(sl, LIQUIDITY_EQ)
     result["sell_side"] = sorted(sell_pools, reverse=True)
 
-    # Previous day high/low (if D1 data passed — detect from index)
+    # Previous day high/low (if D1 data passed -- detect from index)
     try:
         today     = df.index[-1].normalize()
         yesterday = today - pd.Timedelta(days=1)
@@ -103,8 +103,8 @@ def find_tp_target(liquidity: dict, direction: str, current_price: float) -> flo
     """
     Select the nearest relevant liquidity pool as TP target.
 
-    BUY  → target the nearest buy-side pool ABOVE current price
-    SELL → target the nearest sell-side pool BELOW current price
+    BUY  -> target the nearest buy-side pool ABOVE current price
+    SELL -> target the nearest sell-side pool BELOW current price
 
     Falls back to prev day high/low if no pool found.
     """

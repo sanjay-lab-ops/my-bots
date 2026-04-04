@@ -1,5 +1,5 @@
 """
-Pure technical indicator calculations — no MT5 dependency.
+Pure technical indicator calculations -- no MT5 dependency.
 All functions take pandas Series or DataFrames, return Series.
 """
 
@@ -34,7 +34,7 @@ def rsi(series: pd.Series, period: int = 14) -> pd.Series:
 
 
 def vwap(df: pd.DataFrame) -> pd.Series:
-    """Session VWAP — resets at start of dataframe (use daily slice)."""
+    """Session VWAP -- resets at start of dataframe (use daily slice)."""
     typical = (df["high"] + df["low"] + df["close"]) / 3
     vol     = df["tick_volume"].replace(0, 1)
     cum_tp  = (typical * vol).cumsum()
@@ -77,3 +77,24 @@ def crossover(fast: pd.Series, slow: pd.Series) -> pd.Series:
 def crossunder(fast: pd.Series, slow: pd.Series) -> pd.Series:
     """True where fast crosses below slow."""
     return (fast < slow) & (fast.shift(1) >= slow.shift(1))
+
+
+def anchored_vwap(df: pd.DataFrame, anchor_pos: int) -> float:
+    """
+    Compute VWAP anchored to bar at integer position anchor_pos.
+    Returns the current (last) VWAP value from that anchor point.
+    Used for fair-value confluence: price near AVWAP = institutional interest zone.
+    """
+    if anchor_pos < 0 or anchor_pos >= len(df):
+        return float("nan")
+    sub     = df.iloc[anchor_pos:]
+    typical = (sub["high"] + sub["low"] + sub["close"]) / 3
+    vol     = sub["tick_volume"].replace(0, 1)
+    avwap   = (typical * vol).cumsum() / vol.cumsum()
+    return float(avwap.iloc[-1])
+
+
+def volume_average(df: pd.DataFrame, period: int = 20) -> float:
+    """Simple moving average of tick_volume over last `period` bars."""
+    n = min(period, len(df))
+    return float(df["tick_volume"].iloc[-n:].mean()) if n > 0 else 1.0
